@@ -1,0 +1,76 @@
+{% extends('layouts/base.jinja') %}
+{% block page %}
+{% include('components/modals/identifiers.jinja') %}
+{% include('components/modals/mobiles.jinja') %}
+{% include('components/modals/invitation.jinja') %}
+{% include('components/modals/preview.jinja') %}
+
+<div class="text-center mb-3">
+    <a href="{{ url_for('index') }}" class="navbar-brand navbar-brand-autodark">
+        <img src="https://raw.githubusercontent.com/hyperledger/anoncreds-spec/main/spec/images/logo/hl_anoncreds_colour.svg"
+            width="100%" alt="">
+    </a>
+</div>
+<div class="card-header mb-3">
+    <div class="row align-items-center">
+        <div class="col-auto">
+            <div id="connection-avatar">
+                <a href="#" data-bs-toggle="modal" data-bs-target="#modal-invitation"><span class="avatar avatar-xl"
+                        style="background-image: url({{ qrcode(session['demo']['invitation']['short_url']) }})"></span></a>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card-title">Connection</div>
+            <div class="card-subtitle">
+                <div class="text-secondary">
+                    <ul class="list-inline list-inline-dots mb-0">
+                        <li class="list-inline-item">
+                            <a id="btn-message" href="javascript:void(0)" onclick="sendMessage()" hidden>
+                                <span class="text-dark">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        class="icon icon-tabler icons-tabler-outline icon-tabler-message-circle-plus">
+                                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                                        <path
+                                            d="M12.007 19.98a9.869 9.869 0 0 1 -4.307 -.98l-4.7 1l1.3 -3.9c-2.324 -3.437 -1.426 -7.872 2.1 -10.374c3.526 -2.501 8.59 -2.296 11.845 .48c1.992 1.7 2.93 4.04 2.747 6.34" />
+                                        <path d="M16 19h6" />
+                                        <path d="M19 16v6" />
+                                    </svg>
+                                </span>
+                            </a>
+                            <span class="text-dark ms-1" id="connection-label">No Connection</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-actions btn-actions">
+        <div class="dropdown">
+            <a href="#" class="btn-action dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true"
+                aria-expanded="false">
+                <!-- Download SVG icon from http://tabler.io/icons/icon/dots-vertical -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="icon icon-1">
+                    <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"></path>
+                    <path d="M12 19m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"></path>
+                    <path d="M12 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"></path>
+                </svg>
+            </a>
+            <div class="dropdown-menu dropdown-menu-end">
+                <a class="dropdown-item" href="#" data-bs-toggle="modal"
+                    data-bs-target="#modal-identifiers">AdminAPI</a>
+                <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modal-mobiles">Mobile
+                    Wallet</a>
+                <a class="dropdown-item text-danger" href="{{ url_for('restart') }}">Reset</a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="card-body">
+    {% include('components/credential.jinja') %}
+</div>
+{% include('components/scripts/sync.jinja')%}
+{% endblock %}

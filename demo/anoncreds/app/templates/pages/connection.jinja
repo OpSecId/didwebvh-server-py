@@ -1,0 +1,11 @@
+{% extends('layouts/base.jinja') %}
+{% block page %}
+<div class="card">
+    <div class="card-body">
+        <img src="{{ qrcode(session['invitation']['invitation_url'], error_correction='H', border=1) }}" alt="" class="rounded">
+    </div>
+    <div class="card-footer">
+        <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-dark w-100">Connect</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+<div class="scrollable">
+    <div class="chat">
+        <div class="chat-bubbles mb-3">
+            {% for chat in demo.get('chat_log') %}
+            <div class="chat-item">
+                {% if chat.get('state') == 'recieved' %}
+                <div class="row align-items-end justify-content-end">
+                    <div class="col col-lg-10">
+                        <div class="chat-bubble chat-bubble-me">
+                            <div class="chat-bubble-title">
+                                <div class="row">
+                                    <div class="col chat-bubble-author">{{ chat.get('author') }}</div>
+                                    <div class="col-auto chat-bubble-date">{{ chat.get('timestamp') }}</div>
+                                </div>
+                            </div>
+                            <div class="chat-bubble-body">
+                                <p>{{ chat.get('content') }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <span class="avatar avatar-1"
+                            style="background-image: url({{ avatars.gravatar(chat.get('author_hash')) }})"></span>
+                    </div>
+                </div>
+                {% elif chat.get('state') == 'sent' %}
+                <div class="row align-items-end">
+                    <div class="col-auto">
+                        <span class="avatar avatar-1"
+                            style="background-image: url({{ avatars.gravatar(chat.get('author_hash')) }})"></span>
+                    </div>
+                    <div class="col col-lg-10">
+                        <div class="chat-bubble chat-bubble-me">
+                            <div class="chat-bubble-title">
+                                <div class="row">
+                                    <div class="col chat-bubble-author">{{ chat.get('author') }}</div>
+                                    <div class="col-auto chat-bubble-date">{{ chat.get('timestamp') }}</div>
+                                </div>
+                            </div>
+                            <div class="chat-bubble-body">
+                                <p>{{ chat.get('content') }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="">
+            <div class="input-group input-group-flat">
+                <input type="text" class="form-control" autocomplete="off" placeholder="Type message">
+                <span class="input-group-text">
+                    <a href="#" class="link-secondary ms-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="icon icon-tabler icons-tabler-outline icon-tabler-send">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path d="M10 14l11 -11" />
+                            <path d="M21 3l-6.5 18a.55 .55 0 0 1 -1 0l-3.5 -7l-7 -3.5a.55 .55 0 0 1 0 -1l18 -6.5" />
+                        </svg>
+                    </a>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>

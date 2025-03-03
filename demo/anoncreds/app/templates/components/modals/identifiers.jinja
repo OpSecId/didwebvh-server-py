@@ -1,0 +1,25 @@
+<div class="modal fade" id="modal-identifiers" style="display: none;" aria-modal="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="modal-title"><a target="_blank" href="{{session['demo']['agent']['endpoint']}}">{{ session['demo'].get('issuer')}}</a></div>
+                <dl class="row">
+                    <dt class="col-2">Connection:</dt>
+                    <dd class="col-10"><code>{{session['demo']['connection'].get('connection_id') }}</code></dd>
+                    <dt class="col-2">Issuer:</dt>
+                    <dd class="col-10"><code>{{session['demo'].get('issuer_id') }}</code></dd>
+                    <dt class="col-2">Schema:</dt>
+                    <dd class="col-10"><code>{{session['demo'].get('schema_id') }}</code></dd>
+                    <dt class="col-2">Credential Definition:</dt>
+                    <dd class="col-10"><code>{{session['demo'].get('cred_def_id') }}</code></dd>
+                    <dt class="col-2">Revocation Registry:</dt>
+                    <dd class="col-10"><code>{{session['demo'].get('rev_def_id') }}</code></dd>
+                    <dt class="col-2">Credential Offer:</dt>
+                    <dd class="col-10"><code>{{session['demo'].get('cred_ex_id') }}</code></dd>
+                    <dt class="col-2">Presentation Request:</dt>
+                    <dd class="col-10"><code>{{session['demo'].get('pres_ex_id') }}</code></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>

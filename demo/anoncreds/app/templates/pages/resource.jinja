@@ -1,0 +1,153 @@
+{% extends('layouts/base.jinja') %}
+{% block page %}
+{% include('components/modals/resource.jinja') %}
+<div class="">
+    <div class="card-body">
+        <div class="row g-3 align-items-center">
+            <div class="col">
+                <h2 class="page-title mb-1"><a href="{{ resource_url }}">AttestedResource</a></h2>
+                <div class="text-secondary">
+                    <ul class="list-inline list-inline-dots">
+                        <li class="list-inline-item"><a href="#" data-bs-toggle="modal"
+                                data-bs-target="#modal-content">Content</a></li>
+                        <li class="list-inline-item"><a href="#" data-bs-toggle="modal"
+                                data-bs-target="#modal-metadata">Metadata</a></li>
+                        <li class="list-inline-item"><a href="#" data-bs-toggle="modal"
+                                data-bs-target="#modal-links">Links</a>
+                        </li>
+                        <li class="list-inline-item"><a href="#" data-bs-toggle="modal"
+                                data-bs-target="#modal-proof">Proof</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div>
+                <div class="d-flex align-items-baseline">
+                    <div class="h1 mb-3 me-2">{{
+                        ''.join(resource['metadata']['resourceType'][:1].upper() +
+                        resource['metadata']['resourceType'][1:]) }}</div>
+                </div>
+                {% if resource['metadata']['resourceType'] == 'anonCredsSchema' %}
+                <div class="subheader">
+                    <ul class="list-inline list-inline-dots">
+                        <li class="list-inline-item">Issuer</li>
+                        <li class="list-inline-item">{{ resource['content']['name'] }}</li>
+                        <li class="list-inline-item">{{ resource['content']['version'] }}</li>
+                    </ul>
+                </div>
+                <div class="badges-list">
+                    {% for attribute in resource['content']['attrNames'] %}
+                    <span class="badge badge-outline text-dark">{{ attribute }}</span>
+                    {% endfor %}
+                </div>
+                {% elif resource['metadata']['resourceType'] == 'anonCredsCredDef' %}
+                <div class="subheader">
+                    <ul class="list-inline list-inline-dots">
+                        <li class="list-inline-item">Issuer</li>
+                        <li class="list-inline-item"><a
+                                href="{{ resource['content']['schemaId'] | resolve }}">Schema</a></li>
+                        <li class="list-inline-item">{{ resource['content']['tag'] }}</li>
+                        <li class="list-inline-item">
+                            {% if resource['content']['value'].get('revocation') %}
+                            <span class="status status-green">Revocation Enabled</span>
+                            {% else %}
+                            <span class="status status-warning">Revocation Disabled</span>
+                            {% endif %}
+                        </li>
+                    </ul>
+                </div>
+                {% elif resource['metadata']['resourceType'] == 'anonCredsRevocRegDef' %}
+                <div class="d-flex align-items-center">
+                    <div class="subheader">
+                        <ul class="list-inline list-inline-dots">
+                            <li class="list-inline-item">Issuer</li>
+                            <li class="list-inline-item"><a href="{{ resource['content']['credDefId'] | resolve }}">Cred
+                                    Def</a></li>
+                            <li class="list-inline-item">{{ resource['content']['tag'] }}</li>
+                            <li class="list-inline-item">Size: {{ resource['content']['value']['maxCredNum'] }}</li>
+                        </ul>
+                    </div>
+                    <div class="ms-auto lh-1">
+                        <div class="dropdown">
+                            <a class="dropdown-toggle text-secondary" href="javascript:void(0)"
+                                data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Registry
+                                States</a>
+                            <div class="dropdown-menu dropdown-menu-end" style="">
+                                {% for link in resource['links'] %}
+                                {% if link['type'] == 'anonCredsStatusList' %}
+                                <a class="dropdown-item" href="{{ link['id'] | resolve }}">{{ link['timestamp'] | ctime
+                                    }}</a>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% elif resource['metadata']['resourceType'] == 'anonCredsStatusList' %}
+                <div class="subheader">
+                    <ul class="list-inline list-inline-dots">
+                        <li class="list-inline-item">Issuer</li>
+                        <li class="list-inline-item"><a
+                                href="{{ resource['content']['revRegDefId'] | resolve }}">Registry</a></li>
+                        <li class="list-inline-item">{{ resource['content']['timestamp'] | ctime }}</li>
+                    </ul>
+                </div>
+                <div class="mt-2">
+                    <div class="tracking">
+                        {% for entry in resource['content']['revocationList'] %}
+                        {% if entry == 0 %}
+                        <div class="tracking-block bg-success" data-bs-toggle="tooltip" data-bs-placement="top"
+                            title="ok">
+                        </div>
+                        {% elif entry == 1 %}
+                        <div class="tracking-block bg-danger" data-bs-toggle="tooltip" data-bs-placement="top"
+                            title="revoked">
+                        </div>
+                        {% else %}
+                        <div class="tracking-block bg-warning" data-bs-toggle="tooltip" data-bs-placement="top"
+                            title="unknown">
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="row align-items-center mt-3">
+        {# <div class="col-4">
+            <div class="progress progress-1">
+                <div class="progress-bar" style="width: 25%" role="progressbar" aria-valuenow="25" aria-valuemin="0"
+                    aria-valuemax="100" aria-label="25% Complete">
+                    <span class="visually-hidden">25% Complete</span>
+                </div>
+            </div>
+        </div> #}
+        <div class="col">
+            <div class="btn-list justify-content-center">
+                <a href="#" onclick="history.back()" class="btn btn-link link-secondary btn-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="icon icon-tabler icons-tabler-outline icon-tabler-arrow-left">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M5 12l14 0" />
+                        <path d="M5 12l6 6" />
+                        <path d="M5 12l6 -6" />
+                    </svg>
+                </a>
+                <a href="#" onclick=" history.forward()" class="btn btn-link link-secondary btn-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="icon icon-tabler icons-tabler-outline icon-tabler-arrow-right">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M5 12l14 0" />
+                        <path d="M13 18l6 -6" />
+                        <path d="M13 6l6 6" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endblock %}

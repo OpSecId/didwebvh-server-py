@@ -1,0 +1,11 @@
+<div class="modal fade" id="modal-invitation" style="display: none;" aria-modal="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-body">
+                <center>
+                    <img width="90%" src="{{ qrcode(session['demo']['invitation']['invitation_url'], error_correction='H') }}">
+                </center>
+            </div>
+        </div>
+    </div>
+</div>

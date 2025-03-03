@@ -1,0 +1,14 @@
+{
+    "name": "WebVH AnonCreds Demo",
+    "version": "1.0",
+    "issuer": "WebVH AnonCreds Demo",
+    "size": 100,
+    "preview": {
+        "email": "jane.doe@example.com",
+        "date": "20250102"
+    },
+    "request": {
+        "attributes": ["email"],
+        "predicate": ["date", ">=", 20250101]
+    }
+}

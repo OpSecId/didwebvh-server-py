@@ -1,0 +1,15 @@
+<div class="modal fade" id="modal-preview" style="display: none;" aria-modal="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-body">
+                <div class="modal-title">{{ session['demo'].get('name')}}</div>
+                <dl class="row">
+                    {% for attribute in session['demo'].get('preview') %}
+                    <dt class="col-4">{{ attribute }}:</dt>
+                    <dd class="col-8">{{ session['demo'].get('preview').get(attribute) }}</dd>
+                    {% endfor %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>

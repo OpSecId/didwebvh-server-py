@@ -1,0 +1,23 @@
+{% extends('layouts/base.jinja') %}
+{% block page %}
+<div class="card">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-4">
+                <img src="{{ qrcode(session['demo']['pres_ex_url'], error_correction='H', border=1) }}" alt="" class="rounded">
+            </div>
+            <div class="col">
+                <h3 class="card-title mb-1">
+                    <div class="text-reset">AnonCreds & WebVH</div>
+                </h3>
+                <div class="text-secondary">
+                    <a target="_blank" href="{{session['demo']['pres_ex_url']}}">Presentation Request</a>
+                </div>
+                <div class="mt-3">
+                    <a href="{{url_for('verify_presentation')}}" class="btn btn-sm btn-outline-dark w-100">Verify</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

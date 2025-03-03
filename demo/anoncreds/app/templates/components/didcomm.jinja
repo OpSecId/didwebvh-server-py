@@ -1,0 +1,16 @@
+<div class="col-4">
+    <div class="card">
+        <div class="ms-3 mt-3">
+            <a href="{{ url_for('index') }}" class="navbar-brand navbar-brand-autodark">
+                <img src="{{ url_for('static', filename='img/didcomm-logo.png') }}" width="50%" alt="">
+            </a>
+        </div>
+        <div class="card-header mb-3">
+            {% include('components/connection.jinja') %}
+            {% include('components/actions.jinja') %}
+        </div>
+        <div class="card-body">
+            {% include('components/chat.jinja') %}
+        </div>
+    </div>
+</div>

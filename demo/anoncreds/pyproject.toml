@@ -1,0 +1,27 @@
+[project]
+name = "anoncreds-vc"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "PatStLouis",email = "patrick.st-louis@opsecid.ca"}
+]
+readme = "README.md"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "flask (>=3.1.0,<4.0.0)",
+    "flask-qrcode (>=3.2.0,<4.0.0)",
+    "flask-session (>=0.8.0,<0.9.0)",
+    "flask-cors (>=5.0.0,<6.0.0)",
+    "aries-askar (>=0.4.3,<0.5.0)",
+    "python-dotenv (>=1.0.1,<2.0.0)",
+    "flask-avatars (>=0.2.3,<0.3.0)",
+    "pyjokes (>=0.8.3,<0.9.0)",
+]
+
+[tool.poetry]
+package-mode = false
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

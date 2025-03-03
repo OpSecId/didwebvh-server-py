@@ -1,0 +1,22 @@
+<div>
+    <div class="row align-items-center">
+        <div class="col-auto">
+            <div id="connection-avatar">
+                <a href="#" data-bs-toggle="modal" data-bs-target="#modal-invitation"><span class="avatar avatar-xl"
+                        style="background-image: url({{ qrcode(session['demo']['invitation']['short_url']) }})"></span></a>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card-title">Connection</div>
+            <div class="card-subtitle">
+                <div class="text-secondary">
+                    <ul class="list-inline list-inline-dots mb-0">
+                        <li class="list-inline-item">
+                            <span class="text-dark" id="connection-label">{{session['demo'].get('connection').get('state')}}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

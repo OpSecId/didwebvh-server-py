@@ -1,0 +1,65 @@
+<script>
+        var interval = 1000;
+        function syncState() {
+                $.ajax({
+                        type: 'GET',
+                        url: '{{ url_for("sync_state")}}',
+                        success: function (data) {
+                                $('#registry-state').html(data.status_widget.html)
+                                if (data.connection.state === 'active') {
+                                        $('#connection-avatar').html(`<span class="avatar avatar-xl"
+                                        style="background-image: url({{ avatars.gravatar('${data.connection.hash}') }})"></span>`);
+                                        $('#connection-label').html(data.connection.their_label);
+                                        $('#btn-message').removeAttr("hidden");
+                                        $('#btn-issuance').removeAttr("hidden");
+                                        $('#btn-revocation').removeAttr("hidden");
+                                        $('#btn-presentation').removeAttr("hidden");
+                                } else {}
+                                if (data.cred_ex.state === null) {
+                                } else if (data.cred_ex.state === 'deleted') {
+                                        $('#issuance-state').html(`No Exchange`);
+                                } else if (data.cred_ex.state === 'abandonned') {
+                                        $('#issuance-state').html(`<span class="badge bg-danger"></span> Abandonned`);
+                                } else if (data.cred_ex.state === 'credential-revoked') {
+                                        $('#issuance-state').html(`<span class="badge bg-warning"></span> Revoked`);
+                                } else if (data.cred_ex.state === 'done') {
+                                        $('#issuance-state').html(`<span class="badge bg-green"></span> Completed`);
+                                        $('#btn-revocation').removeClass("disabled");
+                                } else {
+                                        $('#issuance-state').html(`
+                                        <div class="progress progress-sm mt-3">
+                                                <div class="progress-bar progress-bar-indeterminate"></div>
+                                        </div>
+                                        `);
+                                }
+                                if (data.pres_ex.state === null) {
+                                } else if (data.pres_ex.state === 'deleted') {
+                                        $('#presentation-state').html(`No Exchange`);
+                                } else if (data.cred_ex.state === 'abandonned') {
+                                        $('#presentation-state').html(`<span class="badge bg-danger"></span> Abandonned`);
+                                } else if (data.pres_ex.state === 'done') {
+                                        if (data.pres_ex.verified === 'true') {
+                                                $('#presentation-state').html(`<span class="badge bg-green"></span> Verified`);
+                                        } else if (data.pres_ex.verified === 'false') {
+                                                $('#presentation-state').html(`<span class="badge bg-danger"></span> Unverified`);
+                                        } else {
+                                                $('#presentation-state').html(`<span class="badge bg-danger"></span> Problem`);
+                                        }
+                                } else {
+                                        $('#presentation-state').html(`
+                                        <div class="progress progress-sm mt-3">
+                                                <div class="progress-bar progress-bar-indeterminate"></div>
+                                        </div>
+                                        `);
+                                }
+                                // $('#registry-state').html(``);
+                                console.log(data);
+                        },
+                        complete: function (data) {
+                                // Schedule the next
+                                setTimeout(syncState, interval);
+                        }
+                });
+        }
+        setTimeout(syncState, interval);
+</script>
