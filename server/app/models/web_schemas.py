@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from .di_proof import DataIntegrityProof
 from .did_document import SecuredDidDocument
-from .did_log import InitialLogEntry, LogEntry
+from .did_log import InitialLogEntry, LogEntry, WitnessProof
 
 
 class BaseModel(BaseModel):
@@ -29,27 +29,11 @@ class RegisterInitialLogEntry(BaseModel):
     logEntry: InitialLogEntry = Field()
 
 
-class UpdateLogEntry(BaseModel):
-    """UpdateLogEntry model."""
+class AddLogEntry(BaseModel):
+    """AddLogEntry model."""
 
     logEntry: LogEntry = Field()
-    witnessProof: List[DataIntegrityProof] = Field(None)
-
-    # model_config = {
-    #     "json_schema_extra": {
-    #         "examples": [
-    #             {
-    #                 "logEntry": {},
-    #                 "witnessProof": [
-    #                     DataIntegrityProof(
-    #                         proofValue='',
-    #                         verificationMethod=''
-    #                     ).model_dump()
-    #                 ]
-    #             }
-    #         ]
-    #     }
-    # }
+    witnessProof: WitnessProof = Field()
 
 
 # class DeactivateLogEntry(BaseModel):

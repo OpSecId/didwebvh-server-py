@@ -9,6 +9,7 @@ from hashlib import sha256
 import canonicaljson
 from aries_askar import Key, Store
 from aries_askar.bindings import LocalKeyHandle
+from aries_askar.error import AskarError
 from fastapi import HTTPException
 from multiformats import multibase
 
@@ -26,6 +27,10 @@ class AskarStorage:
     async def provision(self, recreate=False):
         """Provision the Askar storage."""
         await Store.provision(self.db, "raw", self.key, recreate=recreate)
+        try:
+            await self.store("registry", "witness", [])
+        except:
+            pass
 
     async def open(self):
         """Open the Askar storage."""
@@ -59,6 +64,15 @@ class AskarStorage:
         except Exception:
             raise HTTPException(status_code=404, detail="Couldn't update record.")
 
+    async def append(self, category, data_key, data):
+        """Append data in the store."""
+        try:
+            stored_data = await self.fetch(category, data_key)
+            stored_data.append(data)
+            await self.update(category, data_key, stored_data)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Couldn't update record.")
+
 
 class AskarVerifier:
     """Askar verifier plugin."""
@@ -66,13 +80,16 @@ class AskarVerifier:
     def __init__(self):
         """Initialize the Askar verifier plugin."""
         self.type = "DataIntegrityProof"
-        self.cryptosuite = "eddsa-jcs-2022"
         self.purpose = "assertionMethod"
+        self.cryptosuite = "eddsa-jcs-2022"
+        self.proof_ttl = settings.PROOF_TTL
 
     def create_proof_config(self, did):
         """Create a proof configuration."""
         expires = str(
-            (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat("T", "seconds")
+            (
+                datetime.now(timezone.utc) + timedelta(minutes=self.proof_ttl)
+            ).isoformat("T", "seconds")
         )
         return {
             "type": self.type,
@@ -89,30 +106,21 @@ class AskarVerifier:
 
     def validate_challenge(self, proof, did):
         """Validate the challenge."""
-        try:
-            if proof.get("domain"):
-                assert proof["domain"] == settings.DOMAIN, "Domain mismatch."
-            if proof.get("challenge"):
-                assert proof["challenge"] == self.create_challenge(did + proof["expires"]), (
-                    "Challenge mismatch."
-                )
-        except AssertionError as msg:
-            raise HTTPException(status_code=400, detail=str(msg))
+        if proof.get("domain") != settings.DOMAIN:
+            raise HTTPException(status_code=400, detail='Wrong domain')
+        if proof.get("challenge") != self.create_challenge(did + proof["expires"]):
+            raise HTTPException(status_code=400, detail='Wrong challenge')
 
     def validate_proof(self, proof):
         """Validate the proof."""
-        try:
-            if proof.get("expires"):
-                assert datetime.fromisoformat(proof["expires"]) > datetime.now(timezone.utc), (
-                    "Proof expired."
-                )
-            assert proof["type"] == self.type, f"Expected {self.type} proof type."
-            assert proof["cryptosuite"] == self.cryptosuite, (
-                f"Expected {self.cryptosuite} proof cryptosuite."
-            )
-            assert proof["proofPurpose"] == self.purpose, f"Expected {self.purpose} proof purpose."
-        except AssertionError as msg:
-            raise HTTPException(status_code=400, detail=str(msg))
+        if datetime.fromisoformat(proof["expires"]) < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail='Proof expired.')
+        if proof["type"] != self.type:
+            raise HTTPException(status_code=400, detail=f"Expected {self.type} proof type.")
+        if proof["cryptosuite"] != self.cryptosuite:
+            raise HTTPException(status_code=400, detail=f"Expected {self.cryptosuite} cryptosuite.")
+        if proof["proofPurpose"] != self.purpose:
+            raise HTTPException(status_code=400, detail=f"Expected {self.purpose} proof purpose.")
 
     def verify_proof(self, document, proof):
         """Verify the proof."""

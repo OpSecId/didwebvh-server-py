@@ -23,8 +23,11 @@ class Settings(BaseSettings):
     DID_WEB_PREFIX: str = "did:web:"
     DID_WEBVH_PREFIX: str = "did:webvh:"
     DID_WEB_BASE: str = f"{DID_WEB_PREFIX}{DOMAIN}"
-    ENDORSER_MULTIKEY: str = os.environ.get("ENDORSER_MULTIKEY", "")
+    WITNESS_REGISTRY: str = os.environ.get("WITNESS_REGISTRY")
+    
+    PROOF_TTL: int = os.environ.get("PROOF_TTL", 10) # Minutes
 
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "didwebvh-server")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "")
     POSTGRES_SERVER_NAME: str = os.getenv("POSTGRES_SERVER_NAME", "")
@@ -33,7 +36,7 @@ class Settings(BaseSettings):
     ASKAR_DB: str = "sqlite://app.db"
     if POSTGRES_USER and POSTGRES_PASSWORD and POSTGRES_SERVER_NAME and POSTGRES_SERVER_PORT:
         logging.info(f"Using postgres storage: {POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}")
-        ASKAR_DB: str = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}/didwebvh-server"
+        ASKAR_DB: str = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}/{POSTGRES_DB}"
     else:
         logging.info("Using SQLite database")
 

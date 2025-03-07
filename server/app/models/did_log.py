@@ -15,70 +15,61 @@ class BaseModel(BaseModel):
 
     def model_dump(self, **kwargs) -> Dict[str, Any]:
         """Dump the model to a dictionary."""
-        return super().model_dump(by_alias=True, exclude_none=True, **kwargs)
+        return super().model_dump(by_alias=True, **kwargs)
 
 
 class Witness(BaseModel):
     """Witness model."""
 
-    id: str = Field(None)
-    weight: int = Field(None)
+    id: str = Field()
 
 
 class WitnessParam(BaseModel):
     """WitnessParam model."""
 
-    threshold: int = Field(None)
-    selfWeight: int = Field(None)
-    witnesses: List[Witness] = Field(None)
+    threshold: int = Field()
+    witnesses: List[Witness] = Field()
 
 
-class WitnessSignature(BaseModel):
-    """WitnessSignature model."""
+class WitnessProof(BaseModel):
+    """WitnessProof model."""
 
-    versionId: str = Field(None)
+    versionId: str = Field()
     proof: List[DataIntegrityProof] = Field()
 
 
-class InitialLogParameters(BaseModel):
-    """InitialLogParameters model."""
+# class InitialLogParameters(BaseModel):
+#     """InitialLogParameters model."""
 
-    method: str = Field(f"did:webvh:{settings.WEBVH_VERSION}")
-    scid: str = Field()
-    updateKeys: List[str] = Field()
-    prerotation: bool = Field(default=False)
-    portable: bool = Field(default=False)
-    deactivated: bool = Field(False)
-    nextKeyHashes: List[str] = Field(None)
+#     method: str = Field(f"did:webvh:{settings.WEBVH_VERSION}")
+#     scid: str = Field()
+#     updateKeys: List[str] = Field()
+#     prerotation: bool = Field(default=False)
+#     portable: bool = Field(default=False)
+#     deactivated: bool = Field(False)
+#     nextKeyHashes: List[str] = Field(None)
 
 
 class LogParameters(BaseModel):
     """LogParameters model."""
 
-    prerotation: bool = Field(None)
-    portable: bool = Field(None)
-    updateKeys: List[str] = Field(None)
-    nextKeyHashes: List[str] = Field(None)
-    witness: WitnessParam = Field(None)
+    method: str = Field(None) # This property MUST appear in the first DID log entry.
+    scid: str = Field(None) # This property MUST appear in the first DID log entry.
+    updateKeys: List[str] = Field(None) # his property MUST appear in the first DID log entry
+    portable: bool = Field()
+    prerotation: bool = Field()
+    nextKeyHashes: List[str] = Field()
+    witness: Union[WitnessParam, None] = Field()
     deactivated: bool = Field(None)
     ttl: bool = Field(None)
-    method: str = Field(None)
-    scid: str = Field(None)
 
-    model_config = {
-        "json_schema_extra": {
-            "examples": [
-                {
-                    "method": "",
-                    "scid": "",
-                    "prerotation": True,
-                    "portable": False,
-                    "updateKeys": [],
-                    "nextKeyHashes": [],
-                }
-            ]
-        }
-    }
+
+class InitialLogParameters(BaseModel):
+    """InitialLogParameters model."""
+
+    method: str = Field() # This property MUST appear in the first DID log entry.
+    scid: str = Field() # This property MUST appear in the first DID log entry.
+    updateKeys: List[str] = Field()
 
 
 class InitialLogEntry(BaseModel):

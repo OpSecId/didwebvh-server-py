@@ -5,6 +5,8 @@ from fastapi import HTTPException
 from app.models.did_document import DidDocument
 from app.plugins import AskarStorage, AskarVerifier
 from config import settings
+import requests
+import json
 
 
 def to_did_web(namespace: str, identifier: str):
@@ -95,3 +97,61 @@ def find_proof(proof_set, kid):
         (proof for proof in proof_set if proof["verificationMethod"] == kid),
         None,
     )
+
+
+async def find_known_witness_proof(proof_set):
+    """Find a known witness proof."""
+    witnesses = await AskarStorage().fetch('registry', 'witness')
+    return next(
+        (
+            proof
+            for proof in proof_set
+            if proof["verificationMethod"].split('#')[0] in witnesses
+        ),
+        None,
+    )
+
+async def find_controller_proof(proof_set):
+    """Find the controller proof."""
+    witnesses = await AskarStorage().fetch('registry', 'witness')
+    return next(
+        (
+            proof
+            for proof in proof_set
+            if proof["verificationMethod"].split('#')[0] not in witnesses
+        ),
+        None,
+    )
+
+async def cache_witness_registry():
+    """Cache the witness registry."""
+    r = requests.get(settings.WITNESS_REGISTRY)
+    witnesses = list(r.json()['registry'])
+    await AskarStorage().update("registry", "witness", witnesses)
+    return witnesses
+
+async def validate_new_log_entry_proof(new_log_entry, did):
+    """Assert new log entry proof is valid."""
+    
+    proof = new_log_entry.pop("proof", None)
+    proof = proof if isinstance(proof, list) else [proof]
+    if len(proof) != 1:
+        raise HTTPException(status_code=400, detail="Expecting singular proof from controller.")
+    
+    proof = proof[0]
+    update_key = proof["verificationMethod"].split("#")[-1]
+    if update_key not in await AskarStorage().fetch("updateKeys", did):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    AskarVerifier().verify_proof(new_log_entry, proof)
+    
+    return proof
+
+async def webvh_state_to_web(did_document):
+    """Transform a webvh log state into a did web document."""
+    did = did_document['id']
+    did_prefix = ':'.join(did.split(':')[:3])
+    did_document = json.loads(json.dumps(did_document).replace(did_prefix, 'did:web'))
+    did_document["alsoKnownAs"] = [did]
+    return did_document
+    
