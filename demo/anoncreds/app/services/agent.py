@@ -1,10 +1,8 @@
-import os
 import uuid
 import requests
 from app.services import AskarStorage
 from app.utils import id_to_url, demo_id, url_encode
 from config import Config
-import time
 import pyjokes
 from random import randint
 
@@ -15,13 +13,13 @@ class AgentControllerError(Exception):
 class AgentController:
     def __init__(self):
         self.label = Config.DEMO.get('issuer')
-        self.webvh_server = os.getenv('DIDWEBVH_SERVER')
+        self.webvh_server = Config.DIDWEBVH_SERVER
         self.did_domain = self.webvh_server.split("://")[-1]
         self.did_namespace = "demo"
         self.did_identifier = str(uuid.uuid4())
         self.did_web = f'did:web:{self.did_domain}:{self.did_namespace}:{self.did_identifier}'
-        self.witness_key = os.getenv('DIDWEBVH_WITNESS_KEY')
-        self.endpoint = os.getenv('AGENT_ADMIN_ENDPOINT')
+        self.witness_key = Config.DIDWEBVH_WITNESS_KEY
+        self.endpoint = Config.AGENT_ADMIN_ENDPOINT
         # self.headers = {
         #     'X-API-KEY': os.getenv('AGENT_ADMIN_API_KEY')
         # }

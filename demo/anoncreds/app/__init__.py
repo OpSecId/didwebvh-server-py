@@ -1,18 +1,15 @@
-from flask import Flask, current_app, render_template, session, redirect, url_for, request
+from flask import Flask, render_template, session, redirect, url_for, request
 from flask_cors import CORS
 from flask_qrcode import QRcode
 from flask_session import Session
 from flask_avatars import Avatars
 from config import Config
 from asyncio import run as await_
-import uuid
-import json
 import time
 from app.routes.exchanges import bp as exchanges_bp
-from app.routes.webhooks import bp as webhooks_bp
-from app.services import AskarStorage, AgentController
-from app.utils import id_to_url, demo_id, hash, fetch_resource, id_to_resolver_link
-from app.operations import provision_demo, sync_connection, sync_demo, update_chat, sync_demo_state
+from app.services import AskarStorage
+from app.utils import id_to_url, fetch_resource, id_to_resolver_link
+from app.operations import provision_demo, sync_demo_state
 
 
 def create_app(config_class=Config):
@@ -39,7 +36,6 @@ def create_app(config_class=Config):
     askar = AskarStorage()
     
     app.register_blueprint(exchanges_bp)
-    app.register_blueprint(webhooks_bp)
 
     @app.before_request
     def before_request_callback():
@@ -71,7 +67,6 @@ def create_app(config_class=Config):
         if not session.get('connection_id'):
             return {}, 400
         state = await_(sync_demo_state(session.get('connection_id')))
-        # current_app.logger.warning(state)
         return state, 200
 
     @app.route("/resource", methods=["GET", "POST"])

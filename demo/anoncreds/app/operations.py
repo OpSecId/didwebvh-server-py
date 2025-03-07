@@ -1,4 +1,4 @@
-from app.utils import id_to_url, demo_id, id_to_resolver_link, hash
+from app.utils import demo_id, id_to_resolver_link, hash
 from app.services import AgentController, AskarStorage
 import uuid
 from config import Config
@@ -103,24 +103,4 @@ async def sync_demo_state(connection_id):
         else:
             state['status_widget']['html'] += '<div class="tracking-block bg-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="unknown"></div>\n'
     return state
-
-def update_chat(connection_id):
-    chat_log = []
-    # chat_log.append({
-    #     'connection_id': connection_id,
-    #     'content': 'Hi',
-    #     'timestamp': '02-02-12T00:00:00Z',
-    #     'author_hash': hash('My label'),
-    #     'author': 'My label',
-    #     'state': 'sent',
-    # })
-    # chat_log.append({
-    #     'connection_id': connection_id,
-    #     'content': 'Hello',
-    #     'timestamp': '02-02-12T00:10:00Z',
-    #     'author_hash': hash('Their label'),
-    #     'author': 'Their label',
-    #     'state': 'recieved',
-    # })
-    return chat_log
     
