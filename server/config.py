@@ -23,7 +23,15 @@ class Settings(BaseSettings):
     DID_WEB_PREFIX: str = "did:web:"
     DID_WEBVH_PREFIX: str = "did:webvh:"
     DID_WEB_BASE: str = f"{DID_WEB_PREFIX}{DOMAIN}"
-    WITNESS_REGISTRY: str = os.environ.get("WITNESS_REGISTRY")
+    
+    WITNESS_KEY: str = os.environ.get("WITNESS_REGISTRY", None)
+    WITNESS_REGISTRY: str = os.environ.get("WITNESS_REGISTRY", None)
+    
+    if not WITNESS_KEY and not WITNESS_REGISTRY:
+        pass
+    
+    if WITNESS_KEY and WITNESS_REGISTRY:
+        pass
     
     PROOF_TTL: int = os.environ.get("PROOF_TTL", 10) # Minutes
 
