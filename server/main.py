@@ -25,7 +25,7 @@ class StartupBackgroundTasks(threading.Thread):
     def run(self):
         """Run tasks."""
         # Provision databases
-        asyncio.run(AskarStorage().provision(recreate=True))
+        asyncio.run(AskarStorage().provision())
         asyncio.run(StorageManager().provision())
         
         # Run startup tasks

@@ -41,12 +41,18 @@ class Settings(BaseSettings):
 
     ATTESTED_RESOURCE_CTX: str = "https://identity.foundation/did-attested-resources/context/v0.1"
 
+    POSTGRES_URL: str = os.getenv("POSTGRES_URL", "")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "")
     POSTGRES_SERVER_NAME: str = os.getenv("POSTGRES_SERVER_NAME", "")
     POSTGRES_SERVER_PORT: str = os.getenv("POSTGRES_SERVER_PORT", "")
 
-    if POSTGRES_USER and POSTGRES_PASSWORD and POSTGRES_SERVER_NAME and POSTGRES_SERVER_PORT:
+    if POSTGRES_URL:
+        logging.info(f"Using postgres storage: {POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}")
+        DATABASE_URL: str = POSTGRES_URL
+        ASKAR_DB: str = DATABASE_URL  # Postgres URL format is the same for both
+
+    elif POSTGRES_USER and POSTGRES_PASSWORD and POSTGRES_SERVER_NAME and POSTGRES_SERVER_PORT:
         logging.info(f"Using postgres storage: {POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}")
         DATABASE_URL: str = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}/didwebvh-server"
         ASKAR_DB: str = DATABASE_URL  # Postgres URL format is the same for both
