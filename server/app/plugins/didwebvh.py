@@ -3,6 +3,7 @@
 from fastapi import HTTPException
 from config import settings
 import requests
+import uuid
 from multiformats import multibase, multihash
 
 from app.utilities import digest_multibase
@@ -268,3 +269,31 @@ class DidWebVH:
             server_parameter["watchers"] = [self.active_policy.get("watcher")]
 
         return server_parameter
+
+
+    def new_test_entry(self, identifier, params=None):
+        """Return the latest document state."""
+        
+        # Default params if not provided
+        if params is None:
+            params = {}
+        
+        entry = {}
+        next_entry = DocumentState.create_next
+        return DocumentState.initial(
+            params=params,
+            document={
+                "@context": ["https://www.w3.org/ns/did/v1"],
+                "id": self.placeholder_id('test', identifier)
+            }
+        )
+
+
+    def new_test_entry_logs(self, identifier=str(uuid.uuid4())[:6], count=3, params=None):
+        """Return the latest document state with optional params (witnesses, watchers, etc)."""
+        
+        states = [self.new_test_entry(identifier, params=params)]
+        for _ in range(count):
+            states.append(states[-1].create_next())
+            
+        return [state.history_line() for state in states]

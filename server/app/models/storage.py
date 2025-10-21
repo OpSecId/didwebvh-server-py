@@ -30,6 +30,11 @@ class DidRecord(DidRecordTags):
     active: bool = Field()
     witnesses: List[dict] = Field()
     watchers: List[str] = Field()
+    
+    # Additional state parameters
+    parameters: dict = Field(default_factory=dict)  # Full params from state
+    version_id: str = Field(default="")  # Version ID from state
+    version_time: str = Field(default="")  # Version time from state
 
     class ResourceDetails(CustomBaseModel):
         """Resource details."""

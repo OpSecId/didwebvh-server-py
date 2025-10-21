@@ -29,6 +29,21 @@ class AskarStorageException(Exception):
         return self.message
 
 
+class AskarStorageKeys:
+        
+    TestLogEntry = "testLogEntry"
+    TestResource = "testResource"
+    LogEntries = "logEntries"
+    Resources = "resources"
+    DidRecords = "didRecords"
+    ResourceRecords = "resourceRecords"
+    WitnessFiles = "witnessFiles"
+    WhoisPresentations = "whoisPresentations"
+    Policy = "policy"
+    Registry = "registry"
+    Task = "task"
+
+
 class AskarStorage:
     """Askar storage plugin."""
 
@@ -102,11 +117,44 @@ class AskarStorage:
             else await self.store(category, data_key, data, tags)
         )
 
-    async def get_category_entries(self, category, tag_filter=None):
-        """Return list of items from category."""
+    async def remove(self, category, data_key):
+        """Remove data from the store."""
+        store = await self.open()
+        try:
+            async with store.session() as session:
+                await session.remove(category, data_key)
+        except Exception:
+            logger.debug(f"Askar error removing data {category}: {data_key}", exc_info=True)
+            raise AskarStorageException(f"Askar error removing data {category}: {data_key}")
+
+    async def get_category_entries(self, category, tag_filter=None, limit=None, offset=0):
+        """Return list of items from category with optional pagination."""
         store = await self.open()
         scan = store.scan(category=category, tag_filter=tag_filter)
-        return await scan.fetch_all()
+        
+        if limit is not None:
+            # Fetch with limit for pagination
+            results = []
+            current_offset = 0
+            async for entry in scan:
+                if current_offset >= offset:
+                    results.append(entry)
+                    if len(results) >= limit:
+                        break
+                current_offset += 1
+            return results
+        else:
+            # Fetch all (original behavior)
+            return await scan.fetch_all()
+    
+    async def count_category_entries(self, category, tag_filter=None):
+        """Count total items in a category."""
+        store = await self.open()
+        scan = store.scan(category=category, tag_filter=tag_filter)
+        count = 0
+        async for _ in scan:
+            count += 1
+        return count
 
 
 class AskarVerifier:

@@ -112,6 +112,7 @@ async def sync_storage(
     tasks: BackgroundTasks,
     task_type: TaskType = Query(...),
     force: bool = False,
+    num_test_sets: int = Query(10, description="Number of complete record sets to create for load test"),
     api_key: str = Security(get_api_key),
 ):
     """Start an administrative task."""
@@ -123,6 +124,10 @@ async def sync_storage(
         tasks.add_task(TaskManager(task_id).set_policies, force)
     elif task_type == TaskType.SyncRecords:
         tasks.add_task(TaskManager(task_id).sync_explorer_records, force)
+    elif task_type == TaskType.LoadTest:
+        tasks.add_task(TaskManager(task_id).load_test, num_test_sets)
+    elif task_type == TaskType.MigrateAskarToPostgres:
+        tasks.add_task(TaskManager(task_id).migrate_askar_to_postgres, True)
     else:
         raise HTTPException(status_code=400, detail="Unknown task type.")
     return JSONResponse(status_code=201, content={"task_id": task_id})

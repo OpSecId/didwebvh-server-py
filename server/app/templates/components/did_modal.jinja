@@ -1,47 +1,57 @@
 {% for did in results %}
 <div class="modal modal-blur fade" id="modal-did-{{ loop.index }}" tabindex="-1" aria-hidden="true"
     style="display: none;">
-    <div class="modal-dialog modal-full-width modal-dialog-centered" role="document">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">DID Details</h5>
+                <h5 class="modal-title">
+                    <i class="ti ti-at me-2"></i>DID Details
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <div class="col-md-12 mb-3">
-                    <div class="">
+            <div class="modal-body" style="height: 600px; overflow-y: auto;">
+                <div class="col-md-12 mb-4">
+                    <div class="card card-sm">
                         <div class="card-body">
-                            <div class="row g-2 align-items-center">
-                                <div class="col-auto me-3">
-                                    <span class="avatar avatar-xl" style="background-image: url({{ did.avatar }})">
-                                    </span>
-                                    <div class="mt-3">
+                            <div class="row align-items-center">
+                                <div class="col-auto">
+                                    <span class="avatar avatar-xl" style="background-image: url({{ did.avatar }})"></span>
+                                </div>
+                                <div class="col">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <h3 class="card-title mb-0 me-3">{{ did.scid }}</h3>
                                         {% if did.deactivated == "True" %}
-                                        <span class="badge bg-danger-lt w-100">Deactivated</span>
+                                        <span class="badge bg-red-lt">
+                                            <i class="ti ti-circle-x me-1"></i>Deactivated
+                                        </span>
                                         {% else %}
-                                        <span class="badge bg-success-lt w-100">Active</span>
+                                        <span class="badge bg-green-lt">
+                                            <i class="ti ti-circle-check me-1"></i>Active
+                                        </span>
                                         {% endif %}
                                     </div>
+                                    <div class="text-muted">
+                                        <div class="d-flex align-items-center">
+                                            <i class="ti ti-world me-1"></i>
+                                            <span class="fw-bold">{{ did.domain }}</span>
+                                            <span class="text-muted mx-1">:</span>
+                                            <span class="fw-bold">{{ did.namespace }}</span>
+                                            <span class="text-muted mx-1">:</span>
+                                            <span class="fw-bold">{{ did.identifier }}</span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col ms">
-                                    <dl class="row">
-                                        <dt class="col-1">SCID:</dt>
-                                        <dd class="col-11">
-                                            <h4 class="card-title m-0">{{ did.scid }}</h4>
-                                        </dd>
-                                        <dt class="col-1">Domain:</dt>
-                                        <dd class="col-11">
-                                            <div class="text-secondary">{{ did.domain }}</div>
-                                        </dd>
-                                        <dt class="col-1">Namespace:</dt>
-                                        <dd class="col-11">
-                                            <div class="small mt-1">{{ did.namespace }}</div>
-                                        </dd>
-                                        <dt class="col-1">Alias:</dt>
-                                        <dd class="col-11">
-                                            <div class="small mt-1">{{ did.identifier }}</div>
-                                        </dd>
-                                    </dl>
+                                <div class="col-auto">
+                                    <div class="btn-list">
+                                        <button type="button" class="btn btn-outline-success btn-sm" 
+                                                onclick="copyToClipboard('{{ did.did }}')" 
+                                                title="Copy DID">
+                                            <i class="ti ti-copy me-1"></i>Copy DID
+                                        </button>
+                                        <a target="_blank" href="{{ did.links.resolver }}" class="btn btn-outline-secondary btn-sm">
+                                            <i class="ti ti-external-link me-1"></i>Resolve
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -53,28 +63,39 @@
                             <ul class="nav nav-tabs nav-bordered card-header-tabs" data-bs-toggle="tabs" role="tablist">
                                 <li class="nav-item" role="presentation">
                                     <a href="#tabs-whois-{{ did.scid }}" class="nav-link active" data-bs-toggle="tab"
-                                        aria-selected="true" role="tab">Whois</a>
+                                        aria-selected="true" role="tab">
+                                        <i class="ti ti-user-search me-1"></i>Whois
+                                    </a>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <a href="#tabs-witnesses-{{ did.scid }}" class="nav-link" data-bs-toggle="tab"
-                                        aria-selected="false" role="tab" tabindex="-1">Witnesses</a>
+                                        aria-selected="false" role="tab" tabindex="-1">
+                                        <i class="ti ti-eye-check me-1"></i>Witnesses
+                                    </a>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <a href="#tabs-watchers-{{ did.scid }}" class="nav-link" data-bs-toggle="tab"
-                                        aria-selected="false" role="tab" tabindex="-1">Watchers</a>
+                                        aria-selected="false" role="tab" tabindex="-1">
+                                        <i class="ti ti-eye me-1"></i>Watchers
+                                    </a>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <a href="#tabs-history-{{ did.scid }}" class="nav-link" data-bs-toggle="tab"
-                                        aria-selected="false" role="tab" tabindex="-1">History</a>
+                                        aria-selected="false" role="tab" tabindex="-1">
+                                        <i class="ti ti-history me-1"></i>History
+                                    </a>
                                 </li>
                                 <li class="nav-item" role="presentation">
                                     <a href="#tabs-resources-{{ did.scid }}" class="nav-link" data-bs-toggle="tab"
-                                        aria-selected="false" role="tab" tabindex="-1">Resources</a>
+                                        aria-selected="false" role="tab" tabindex="-1">
+                                        <i class="ti ti-files me-1"></i>Resources
+                                    </a>
                                 </li>
-                                <li class="nav-item ms-auto" role="presentation">
-                                    <a href="#tabs-settings-{{ did.scid }}" class="nav-link" title="Settings"
-                                        data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1"><i
-                                            class="icon ti ti-settings"></i></a>
+                                <li class="nav-item" role="presentation">
+                                    <a href="#tabs-links-{{ did.scid }}" class="nav-link"
+                                        data-bs-toggle="tab" aria-selected="false" role="tab" tabindex="-1">
+                                        <i class="ti ti-link me-1"></i>Quick Links
+                                    </a>
                                 </li>
                             </ul>
                         </div>
@@ -82,134 +103,403 @@
                             <div class="tab-content">
                                 <div class="tab-pane active show" id="tabs-whois-{{ did.scid }}" role="tabpanel">
                                     <div class="row">
-                                        {% if did.whois_presentation %}
+                                        {% if did.whois_presentation and did.whois_presentation.verifiableCredential %}
                                         {% for credential in did.whois_presentation.verifiableCredential %}
-                                        <div class="col-md-12">
-                                            <div class="card mb-3">
+                                        {% set issuer_id = credential.issuer.split(':')[-1] if ':' in credential.issuer else credential.issuer %}
+                                        {% set cred_types = credential.type if credential.type is iterable and credential.type is not string else [credential.type] %}
+                                        {% set display_type = cred_types | reject('equalto', 'VerifiableCredential') | list %}
+                                        {% set final_type = display_type[0] if display_type else cred_types[0] %}
+                                        <div class="col-md-12 mb-3">
+                                            <div class="card card-link-pop">
                                                 <div class="card-body">
-                                                    <div class="row">
-                                                        <div class="col">
-                                                            <div class="font-weight-medium">Type: {{ credential.type |
-                                                                tojson }}</div>
-                                                            <div class="font-weight-medium">Issuer: {{ credential.issuer
-                                                                | tojson }}</div>
+                                                    <div class="d-flex align-items-start">
+                                                        <div class="avatar avatar-lg me-3" style="background-image: url('data:image/svg+xml;base64,{{ generate_avatar(issuer_id) }}')"></div>
+                                                        <div class="flex-fill">
+                                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                                <div>
+                                                                    <h3 class="card-title mb-1">{{ final_type.replace('Credential', ' Credential') }}</h3>
+                                                                    <span class="badge bg-blue-lt">
+                                                                        <i class="ti ti-shield-check me-1"></i>Verified
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <div class="text-muted small mb-1">
+                                                                    <i class="ti ti-user-check me-1"></i>Issued By
+                                                                </div>
+                                                                {% if credential.issuer.name %}
+                                                                <div class="fw-bold mb-1">{{ credential.issuer.name }}</div>
+                                                                {% endif %}
+                                                                <code class="small">{{ credential.issuer.id if credential.issuer.id else credential.issuer }}</code>
+                                                            </div>
+                                                            {% if credential.credentialSubject %}
+                                                            <div class="row g-2">
+                                                                {% for key, value in credential.credentialSubject.items() %}
+                                                                {% if key != 'id' %}
+                                                                <div class="col-md-6">
+                                                                    <div class="text-muted small">{{ key | replace('_', ' ') | title }}</div>
+                                                                    <div class="fw-bold">{{ value }}</div>
+                                                                </div>
+                                                                {% endif %}
+                                                                {% endfor %}
+                                                            </div>
+                                                            {% endif %}
+                                                            {% if credential.issuanceDate %}
+                                                            <div class="text-muted small mt-3">
+                                                                <i class="ti ti-clock me-1"></i>Issued: {{ credential.issuanceDate }}
+                                                            </div>
+                                                            {% endif %}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                         {% endfor %}
+                                        {% else %}
+                                        <div class="col-md-12">
+                                            <div class="empty">
+                                                <div class="empty-icon">
+                                                    <i class="ti ti-user-search icon icon-lg"></i>
+                                                </div>
+                                                <p class="empty-title">No whois information</p>
+                                                <p class="empty-subtitle text-secondary">
+                                                    This DID has not published any whois credentials
+                                                </p>
+                                            </div>
+                                        </div>
                                         {% endif %}
                                     </div>
                                 </div>
                                 <div class="tab-pane" id="tabs-witnesses-{{ did.scid }}" role="tabpanel">
                                     <div class="row">
-                                        {% if did.witnesses %}
-                                        {% for witness in did.witnesses %}
-                                        <div class="col-md-6">
-                                            <div class="card">
+                                        {% if did.parameters and did.parameters.witness %}
+                                        <div class="col-md-12 mb-3">
+                                            <div class="alert alert-info">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="ti ti-info-circle me-2"></i>
+                                                    <div>
+                                                        <strong>Threshold:</strong> {{ did.parameters.witness.threshold }} of {{ did.parameters.witness.witnesses|length }} witnesses required
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% for witness in did.parameters.witness.witnesses %}
+                                        <div class="col-md-12 mb-3">
+                                            <div class="card card-link-pop">
                                                 <div class="card-body">
-                                                    <div class="row g-2 align-items-center">
-                                                        <div class="col">
-                                                            <h4 class="card-title m-0">Witness Service</h4>
-                                                            <div class="text-secondary"><a href="#">{{ witness.id }}</a>
+                                                    <div class="d-flex align-items-start">
+                                                        <div class="avatar avatar-rounded me-3" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                                                            <i class="ti ti-eye-check fs-2 text-white"></i>
+                                                        </div>
+                                                        <div class="flex-fill">
+                                                            <h3 class="card-title mb-3">Witness {{ loop.index }}</h3>
+                                                            <div class="mb-2">
+                                                                <code class="small text-wrap d-block" style="word-break: break-all;">{{ witness.id }}</code>
                                                             </div>
-                                                            <div class="small mt-1"><span class="badge bg-green"></span>
-                                                                Online</div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                         {% endfor %}
+                                        {% elif did.witnesses and did.witnesses|length > 0 %}
+                                        {% for witness in did.witnesses %}
+                                        <div class="col-md-12 mb-3">
+                                            <div class="card card-link-pop">
+                                                <div class="card-body">
+                                                    <div class="d-flex align-items-start">
+                                                        <div class="avatar avatar-rounded me-3" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                                                            <i class="ti ti-eye-check fs-2 text-white"></i>
+                                                        </div>
+                                                        <div class="flex-fill">
+                                                            <h3 class="card-title mb-3">Witness {{ loop.index }}</h3>
+                                                            <div class="mb-2">
+                                                                <div class="text-muted small mb-1">Witness DID</div>
+                                                                <code class="small text-wrap d-block" style="word-break: break-all;">{{ witness.id if witness.id is defined else witness }}</code>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                        {% else %}
+                                        <div class="col-md-12">
+                                            <div class="empty">
+                                                <div class="empty-icon">
+                                                    <i class="ti ti-eye-check icon icon-lg"></i>
+                                                </div>
+                                                <p class="empty-title">No witnesses configured</p>
+                                                <p class="empty-subtitle text-secondary">
+                                                    This DID does not have any witness services
+                                                </p>
+                                            </div>
+                                        </div>
                                         {% endif %}
                                     </div>
                                 </div>
                                 <div class="tab-pane" id="tabs-watchers-{{ did.scid }}" role="tabpanel">
                                     <div class="row">
-                                        {% if did.watchers %}
-                                        {% for watcher in did.watchers %}
-                                        <div class="col-md-6">
-                                            <div class="card">
+                                        {% if did.parameters and did.parameters.watchers %}
+                                        {% for watcher in did.parameters.watchers %}
+                                        <div class="col-md-12 mb-3">
+                                            <div class="card card-link-pop">
                                                 <div class="card-body">
-                                                    <div class="row g-2 align-items-center">
-                                                        <div class="col">
-                                                            <h4 class="card-title m-0">Watcher Service</h4>
-                                                            <div class="text-secondary"><a target="_blank"
-                                                                    href="{{ watcher }}">{{ watcher }}</a></div>
-                                                            <div class="small mt-1"><span class="badge bg-green"></span>
-                                                                Online</div>
+                                                    <div class="d-flex align-items-start">
+                                                        <div class="avatar avatar-rounded me-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                                            <i class="ti ti-eye fs-2 text-white"></i>
                                                         </div>
-                                                        <div class="col-auto">
+                                                        <div class="flex-fill">
+                                                            <h3 class="card-title mb-3">Watcher Service {{ loop.index }}</h3>
+                                                            <div class="mb-3">
+                                                                <a target="_blank" href="{{ watcher }}" class="text-decoration-none fw-bold">
+                                                                    {{ watcher }}
+                                                                    <i class="ti ti-external-link ms-1"></i>
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                        <div class="d-flex flex-column gap-2 ms-3">
                                                             <a target="_blank"
-                                                                href="{{ watcher+'/log?scid='+did.scid }}" class="btn">
-                                                                Log File </a>
-                                                        </div>
-                                                        <div class="col-auto">
+                                                                href="{{ watcher+'/log?scid='+did.scid }}" 
+                                                                class="btn btn-sm btn-outline-primary rounded-pill">
+                                                                <i class="ti ti-file-text me-1"></i>View Log File
+                                                            </a>
                                                             <a target="_blank"
                                                                 href="{{ watcher+'/witness?scid='+did.scid }}"
-                                                                class="btn"> Witness File </a>
+                                                                class="btn btn-sm btn-outline-secondary rounded-pill">
+                                                                <i class="ti ti-certificate me-1"></i>View Witness File
+                                                            </a>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                         {% endfor %}
+                                        {% elif did.watchers %}
+                                        {% for watcher in did.watchers %}
+                                        <div class="col-md-12 mb-3">
+                                            <div class="card card-link-pop">
+                                                <div class="card-body">
+                                                    <div class="d-flex align-items-start">
+                                                        <div class="avatar avatar-rounded me-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                                            <i class="ti ti-eye fs-2 text-white"></i>
+                                                        </div>
+                                                        <div class="flex-fill">
+                                                            <h3 class="card-title mb-3">Watcher Service {{ loop.index }}</h3>
+                                                            <div class="mb-3">
+                                                                <a target="_blank" href="{{ watcher }}" class="text-decoration-none fw-bold">
+                                                                    {{ watcher }}
+                                                                    <i class="ti ti-external-link ms-1"></i>
+                                                                </a>
+                                                            </div>
+                                                            <div class="d-flex gap-2">
+                                                            <a target="_blank"
+                                                                    href="{{ watcher+'/log?scid='+did.scid }}" 
+                                                                    class="btn btn-sm btn-outline-primary rounded-pill">
+                                                                    <i class="ti ti-file-text me-1"></i>View Log File
+                                                                </a>
+                                                            <a target="_blank"
+                                                                href="{{ watcher+'/witness?scid='+did.scid }}"
+                                                                    class="btn btn-sm btn-outline-secondary rounded-pill">
+                                                                    <i class="ti ti-certificate me-1"></i>View Witness File
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                        {% else %}
+                                        <div class="col-md-12">
+                                            <div class="empty">
+                                                <div class="empty-icon">
+                                                    <i class="ti ti-eye icon icon-lg"></i>
+                                                </div>
+                                                <p class="empty-title">No watchers configured</p>
+                                                <p class="empty-subtitle text-secondary">
+                                                    This DID does not have any watcher services
+                                                </p>
+                                            </div>
+                                        </div>
                                         {% endif %}
                                     </div>
                                 </div>
                                 <div class="tab-pane" id="tabs-history-{{ did.scid }}" role="tabpanel">
-
-                                    <div class="card-body">
-                                        <div class="row g-3">
-
+                                    <div class="row">
+                                        {% if did.logs %}
+                                        <div class="col-md-12">
+                                            <div class="list-group list-group-flush">
                                             {% for log in did.logs %}
-                                            <div class="col-12">
-                                                <div class="row g-3 align-items-center">
-                                                    <div class="col text-truncate">
-                                                        <div class="text-reset d-block text-truncate">{{
-                                                            log.versionId }}</div>
-                                                        <div class="text-secondary text-truncate mt-n1">{{
-                                                            log.versionTime }}</div>
+                                                <div class="list-group-item">
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="avatar avatar-sm me-3 bg-primary-lt">
+                                                            <i class="ti ti-git-commit"></i>
+                                                        </span>
+                                                        <div class="flex-fill">
+                                                            <div class="fw-bold">Version {{ log.versionId }}</div>
+                                                            <div class="text-secondary" style="font-size: 0.75rem;">
+                                                                <i class="ti ti-clock me-1"></i>{{ log.versionTime }}
+                                                            </div>
+                                                        </div>
+                                                        <span class="badge badge-sm bg-blue-lt">v{{ loop.index }}</span>
                                                     </div>
                                                 </div>
+                                                {% endfor %}
                                             </div>
-                                            {% endfor %}
-
                                         </div>
+                                        {% else %}
+                                        <div class="col-md-12">
+                                            <div class="empty">
+                                                <div class="empty-icon">
+                                                    <i class="ti ti-history icon icon-lg"></i>
+                                                </div>
+                                                <p class="empty-title">No history available</p>
+                                                <p class="empty-subtitle text-secondary">
+                                                    No log entries found for this DID
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {% endif %}
                                     </div>
                                 </div>
                                 <div class="tab-pane" id="tabs-resources-{{ did.scid }}" role="tabpanel">
                                     <div class="row">
+                                        {% if did.resources %}
+                                        <div class="col-md-12">
+                                            <div class="list-group list-group-flush">
                                         {% for resource in did.resources %}
-                                        <div class="col-md-12 mb-1">
-                                            <a class="card card-link" href="resources?resource_id={{ resource.digest }}">
-                                                <div class="card-body">
-                                                    <div class="row">
-                                                        <div class="col">
-                                                            <div class="font-weight-medium">{{ resource.type }}</div>
-                                                            <div class="text-secondary">{{ resource.details }}</div>
+                                                <a href="resources?resource_id={{ resource.digest }}" class="list-group-item list-group-item-action">
+                                                    <div class="d-flex align-items-center">
+                                                        {% if 'Schema' in resource.type %}
+                                                        <span class="avatar avatar-sm me-3 bg-blue-lt">
+                                                            <i class="ti ti-database"></i>
+                                                        </span>
+                                                        {% elif 'CredDef' in resource.type %}
+                                                        <span class="avatar avatar-sm me-3 bg-indigo-lt">
+                                                            <i class="ti ti-id-badge"></i>
+                                                        </span>
+                                                        {% elif 'RevReg' in resource.type %}
+                                                        <span class="avatar avatar-sm me-3 bg-pink-lt">
+                                                            <i class="ti ti-refresh"></i>
+                                                        </span>
+                                                        {% else %}
+                                                        <span class="avatar avatar-sm me-3 bg-secondary-lt">
+                                                            <i class="ti ti-file"></i>
+                                                        </span>
+                                                        {% endif %}
+                                                        <div class="flex-fill">
+                                                            <div class="fw-bold">{{ resource.type }}</div>
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem; max-width: 400px;">
+                                                                {{ resource.details }}
+                                                            </div>
                                                         </div>
+                                                        <i class="ti ti-chevron-right text-muted"></i>
                                                     </div>
-                                                </div>
-                                            </a>
+                                                </a>
+                                                {% endfor %}
+                                            </div>
                                         </div>
-                                        {% endfor %}
+                                        {% else %}
+                                        <div class="col-md-12">
+                                            <div class="empty">
+                                                <div class="empty-icon">
+                                                    <i class="ti ti-files icon icon-lg"></i>
+                                                </div>
+                                                <p class="empty-title">No resources found</p>
+                                                <p class="empty-subtitle text-secondary">
+                                                    This DID has no associated resources
+                                                </p>
+                                                <div class="empty-action">
+                                                    <a href="resources?scid={{ did.scid }}" class="btn btn-primary">
+                                                        <i class="ti ti-clipboard-search me-1"></i>Browse All Resources
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endif %}
                                     </div>
                                 </div>
-                                <div class="tab-pane" id="tabs-settings-{{ did.scid }}" role="tabpanel">
-                                    <h4>Settings</h4>
-                                    <div class="text-secondary">{{ did.did }}</div>
-                                    <div><a href="resources?scid={{ did.scid }}"><i
-                                                class="icon ti ti-clipboard-search"></i> Browse Resources</a></div>
-                                    <div><a target="_blank" href="{{ did.links.resolver }}"><i
-                                                class="icon ti ti-external-link"></i> Resolve DID</a></div>
-                                    <div><a target="_blank" href="{{ did.links.log_file }}"><i
-                                                class="icon ti ti-external-link"></i> Log File</a></div>
-                                    <div><a target="_blank" href="{{ did.links.witness_file }}"><i
-                                                class="icon ti ti-external-link"></i> Witness File</a></div>
-                                    <div><a target="_blank" href="{{ did.links.whois }}"><i
-                                                class="icon ti ti-external-link"></i> Whois Presentation</a></div>
+                                <div class="tab-pane" id="tabs-links-{{ did.scid }}" role="tabpanel">
+                                    <div class="row">
+                                        <div class="col-md-12 mb-3">
+                                            <h4 class="mb-3">
+                                                <i class="ti ti-link me-2"></i>Quick Links
+                                            </h4>
+                                            <div class="list-group list-group-flush">
+                                                <a href="resources?scid={{ did.scid }}" class="list-group-item list-group-item-action">
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="avatar avatar-sm me-3 bg-primary-lt">
+                                                            <i class="ti ti-clipboard-search"></i>
+                                                        </span>
+                                                        <div class="flex-fill">
+                                                            <div class="fw-bold">Browse Resources</div>
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
+                                                                View all resources controlled by this DID
+                                                            </div>
+                                                        </div>
+                                                        <span class="badge badge-sm">Internal</span>
+                                                    </div>
+                                                </a>
+                                                <a target="_blank" href="{{ did.links.resolver }}" class="list-group-item list-group-item-action">
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="avatar avatar-sm me-3 bg-blue-lt">
+                                                            <i class="ti ti-external-link"></i>
+                                                        </span>
+                                                        <div class="flex-fill">
+                                                            <div class="fw-bold">Resolve DID</div>
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
+                                                                {{ did.links.resolver }}
+                                                            </div>
+                                                        </div>
+                                                        <span class="badge badge-sm bg-blue-lt">External</span>
+                                                    </div>
+                                                </a>
+                                                <a target="_blank" href="{{ did.links.log_file }}" class="list-group-item list-group-item-action">
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="avatar avatar-sm me-3 bg-green-lt">
+                                                            <i class="ti ti-file-text"></i>
+                                                        </span>
+                                                        <div class="flex-fill">
+                                                            <div class="fw-bold">Log File</div>
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
+                                                                {{ did.links.log_file }}
+                                                            </div>
+                                                        </div>
+                                                        <span class="badge badge-sm bg-green-lt">External</span>
+                                                    </div>
+                                                </a>
+                                                <a target="_blank" href="{{ did.links.witness_file }}" class="list-group-item list-group-item-action">
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="avatar avatar-sm me-3 bg-orange-lt">
+                                                            <i class="ti ti-certificate"></i>
+                                                        </span>
+                                                        <div class="flex-fill">
+                                                            <div class="fw-bold">Witness File</div>
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
+                                                                {{ did.links.witness_file }}
+                                                            </div>
+                                                        </div>
+                                                        <span class="badge badge-sm bg-orange-lt">External</span>
+                                                    </div>
+                                                </a>
+                                                <a target="_blank" href="{{ did.links.whois }}" class="list-group-item list-group-item-action">
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="avatar avatar-sm me-3 bg-purple-lt">
+                                                            <i class="ti ti-id-badge-2"></i>
+                                                        </span>
+                                                        <div class="flex-fill">
+                                                            <div class="fw-bold">Whois Presentation</div>
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
+                                                                {{ did.links.whois }}
+                                                            </div>
+                                                        </div>
+                                                        <span class="badge badge-sm bg-purple-lt">External</span>
+                                                    </div>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

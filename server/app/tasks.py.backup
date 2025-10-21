@@ -1,0 +1,310 @@
+"""Background Tasks."""
+
+import logging
+import json
+import asyncio
+import time
+import uuid
+from hashlib import sha256
+from typing import Dict, List
+
+from enum import Enum
+
+from config import settings
+
+from app.models.policy import ActivePolicy
+from app.models.task import TaskInstance
+from app.models.resource import AttestedResource, ResourceMetadata
+from app.plugins import AskarStorage, AskarStorageKeys, DidWebVH
+from app.utilities import (
+    timestamp,
+    sync_resource,
+    sync_did_info,
+)
+
+logger = logging.getLogger(__name__)
+
+askar = AskarStorage()
+webvh = DidWebVH()
+
+
+class TaskType(str, Enum):
+    """Types of tasks."""
+
+    SetPolicy = "set_policy"
+    SyncRecords = "sync_records"
+    LoadTest = "load_test"
+
+
+class TaskStatus(str, Enum):
+    """Statuses of tasks."""
+
+    started = "started"
+    finished = "finished"
+    abandonned = "abandonned"
+
+
+class TaskManager:
+    """TaskManager."""
+
+    def __init__(self, task_id: str = None):
+        """Initialize TaskManager."""
+        self.task_id = task_id
+        self.task = None
+        self.workers = 10
+
+    def task_tags(self):
+        """Return current task tags."""
+        return {"status": self.task.status, "task_type": self.task.type}
+
+    async def start_task(self, task_type):
+        """Start new task."""
+        logger.info(f"Task {task_type} started: {self.task_id}")
+        self.task = TaskInstance(
+            id=self.task_id,
+            type=task_type,
+            created=timestamp(),
+            updated=timestamp(),
+            status=TaskStatus.started,
+            progress={},
+        )
+        await askar.store("task", self.task_id, self.task.model_dump(), self.task_tags())
+
+    async def update_task_progress(self, progress):
+        """Update task progress."""
+        logger.debug(f"Task {self.task_id} updated: {json.dumps(progress)}")
+        self.task.progress.update(progress)
+        self.task.updated = timestamp()
+        await askar.update("task", self.task_id, self.task.model_dump(), self.task_tags())
+
+    async def finish_task(self):
+        """Finish existing task."""
+        logger.info(f"Task {self.task_id} finished.")
+        self.task.status = TaskStatus.finished
+        self.task.updated = timestamp()
+        await askar.update("task", self.task_id, self.task.model_dump(), self.task_tags())
+
+    async def abandon_task(self, message=None):
+        """Abandon existing task."""
+        logger.error(f"Task {self.task_id} abandonned: {message}")
+        self.task.status = TaskStatus.abandonned
+        self.task.message = message
+        self.task.updated = timestamp()
+        await askar.update("task", self.task_id, self.task.model_dump(), self.task_tags())
+
+    async def set_policies(self, force=False):
+        """Provision DB with policies."""
+
+        await self.start_task(TaskType.SetPolicy)
+
+        try:
+            if not (policy := await askar.fetch("policy", "active")):
+                logger.info("Creating server policies.")
+                policy = ActivePolicy(
+                    version=settings.WEBVH_VERSION,
+                    witness=settings.WEBVH_WITNESS,
+                    watcher=settings.WEBVH_WATCHER,
+                    portability=settings.WEBVH_PORTABILITY,
+                    prerotation=settings.WEBVH_PREROTATION,
+                    endorsement=settings.WEBVH_ENDORSEMENT,
+                    witness_registry_url=settings.KNOWN_WITNESS_REGISTRY,
+                ).model_dump()
+                await askar.store("policy", "active", policy)
+            else:
+                logger.info("Skipping server policies.")
+
+            await self.update_task_progress({"policy": json.dumps(policy)})
+
+            if not (witness_registry := await askar.fetch("registry", "knownWitnesses")):
+                logger.info("Creating known witness registry.")
+                witness_registry = {
+                    "meta": {"created": timestamp(), "updated": timestamp()},
+                    "registry": {},
+                }
+                if settings.KNOWN_WITNESS_KEY:
+                    witness_did = f"did:key:{settings.KNOWN_WITNESS_KEY}"
+                    witness_registry["registry"][witness_did] = {"name": "Default Server Witness"}
+                await askar.store("registry", "knownWitnesses", witness_registry)
+            else:
+                logger.info("Skipping known witness registry.")
+
+            await self.update_task_progress({"knownWitnessRegistry": json.dumps(witness_registry)})
+
+            await self.finish_task()
+
+        except Exception as e:
+            await self.abandon_task(str(e))
+
+    async def sync_explorer_records(self, force=False):
+        """Sync explorer records."""
+
+        await self.start_task(TaskType.SyncRecords)
+
+        try:
+            entries = await askar.get_category_entries("resource")
+            for idx, entry in enumerate(entries):
+                await self.update_task_progress({"resourceRecords": f"{idx + 1}/{len(entries)}"})
+
+                if not force and await askar.fetch("resourceRecord", entry.name):
+                    continue
+
+                resource_record, tags = sync_resource(entry.value_json)
+                await askar.update("resource", entry.name, entry.value_json, tags)
+                await askar.store_or_update("resourceRecord", entry.name, resource_record, tags)
+
+            entries = await askar.get_category_entries("logEntries")
+            for idx, entry in enumerate(entries):
+                await self.update_task_progress({"didRecords": f"{idx + 1}/{len(entries)}"})
+
+                if not force and await askar.fetch("didRecord", entry.name):
+                    continue
+
+                logs = entry.value_json
+                state = webvh.get_document_state(logs)
+                did_record, tags = sync_did_info(
+                    state=state,
+                    logs=logs,
+                    did_resources=[
+                        resource.value_json
+                        for resource in await askar.get_category_entries(
+                            "resource", {"scid": state.scid}
+                        )
+                    ],
+                    witness_file=(await askar.fetch("witnessFile", entry.name) or []),
+                    whois_presentation=(await askar.fetch("whois", entry.name) or {}),
+                )
+                await askar.update("logEntries", entry.name, entry.value_json, tags=tags)
+                await askar.store_or_update("didRecord", entry.name, did_record, tags=tags)
+
+            await self.finish_task()
+
+        except Exception as e:
+            await self.abandon_task(str(e))
+
+    async def load_test(self, entries: int = 100):
+        """Create mock DIDs for load testing."""
+
+        await self.start_task(TaskType.LoadTest)
+
+        try:
+            logger.info(f"Creating {entries} mock DID entries for load testing...")
+            created_dids = []
+            
+            for i in range(entries):
+                # Generate unique identifier for this DID
+                identifier = str(uuid.uuid4())[:8]
+                namespace = "loadtest"
+                
+                # Create mock DID log entries
+                test_logs = webvh.new_test_entry_logs(identifier)
+                
+                # Get the document state from the logs
+                state = webvh.get_document_state(test_logs)
+                did = state.document_id
+                scid = state.scid
+                
+                # Parse DID components
+                _, _, _, domain, ns, alias = did.split(":")
+                
+                # Create client_id for storage (namespace:identifier format)
+                client_id = f"{namespace}:{identifier}"
+                
+                tags = {
+                    "scid": scid,
+                    "domain": domain,
+                    "namespace": namespace,
+                    "alias": identifier,
+                    "did": did,
+                    "deactivated": "False",
+                    "created": timestamp(),
+                    "updated": timestamp()
+                }
+                
+                # Create DID record for explorer
+                did_record, _ = sync_did_info(
+                    state=state,
+                    logs=test_logs,
+                    did_resources=[],
+                    witness_file=[],
+                    whois_presentation={}
+                )
+                
+                # Store in real categories (not test categories)
+                await askar.store("logEntries", client_id, test_logs, tags)
+                await askar.store("didRecord", client_id, did_record, tags)
+                
+                created_dids.append(did)
+                
+                await self.update_task_progress({
+                    "status": "creating_dids",
+                    "created": f"{i + 1}/{entries}",
+                    "total": entries
+                })
+                
+                # Create a mock resource for this DID
+                content = {
+                    'name': 'LoadTestSchema',
+                    'version': '1.0.0',
+                    'issuerId': did,
+                    'attrNames': ['name', 'age', 'timestamp', 'loadtest_id']
+                }
+                
+                # Generate resource ID from content hash
+                content_hash = sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()[:16]
+                resource_id = f"loadtest-{content_hash}"
+                
+                metadata = ResourceMetadata(
+                    resourceId=resource_id,
+                    resourceType='anonCredsSchema',
+                    resourceName=f'LoadTestSchema{i}'
+                )
+                
+                # Create attested resource with mock proof
+                attested_resource = {
+                    "@context": [
+                        "https://identity.foundation/did-attested-resources/context/v0.1",
+                        "https://w3id.org/security/data-integrity/v2"
+                    ],
+                    "type": ["AttestedResource"],
+                    "id": f'{did}/resources/{resource_id}',
+                    "content": content,
+                    "metadata": metadata.model_dump(),
+                    "proof": {
+                        "type": "DataIntegrityProof",
+                        "cryptosuite": "eddsa-jcs-2022",
+                        "proofPurpose": "assertionMethod",
+                        "verificationMethod": f"{did}#mockkey",
+                        "proofValue": "zmockedproofvalue1234567890"  # Mock proof
+                    }
+                }
+                
+                # Create resource record for explorer
+                resource_record, resource_tags = sync_resource(attested_resource)
+                
+                # Merge tags
+                resource_tags.update(tags)
+                resource_tags.update({
+                    "resourceType": metadata.resourceType,
+                    "resourceName": metadata.resourceName,
+                    "resourceId": resource_id
+                })
+                
+                # Store resource in proper categories
+                resource_store_id = f"{namespace}:{identifier}:{resource_id}"
+                await askar.store("resource", resource_store_id, attested_resource, resource_tags)
+                await askar.store("resourceRecord", resource_store_id, resource_record, resource_tags)
+            
+            # Mark task as complete
+            await self.update_task_progress({
+                "status": "completed",
+                "created": entries,
+                "total": entries,
+                "sample_dids": created_dids[:5]  # Show first 5 DIDs as sample
+            })
+            await self.finish_task()
+            logger.info(f"Load test completed: created {entries} mock DID entries")
+
+        except Exception as e:
+            logger.error(f"Load test failed: {str(e)}", exc_info=True)
+            await self.abandon_task(str(e))
+

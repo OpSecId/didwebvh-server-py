@@ -75,3 +75,27 @@ The following policy variables can be used to enforce parameters from the did:we
 ### Exploring the resources
 
 Have a look at the demo directory for instructions on how to browse the explorer.
+
+## Development
+
+This project uses [uv](https://github.com/astral-sh/uv) for fast Python package management.
+
+### Quick Start
+
+1. **Install uv**:
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   cd server
+   uv sync
+   ```
+
+3. **Run the server**:
+   ```bash
+   uv run python main.py
+   ```
+
+For detailed development instructions, see [DEVELOPMENT.md](./DEVELOPMENT.md).

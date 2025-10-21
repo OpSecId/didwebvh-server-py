@@ -9,6 +9,7 @@ from datetime import datetime, timezone, timedelta
 from operator import itemgetter
 
 from app.models.storage import DidRecordTags, DidRecord, ResourceRecordTags, ResourceRecord
+from app.avatar_generator import generate_avatar
 
 MULTIKEY_PARAMS = {"ed25519": {"length": 48, "prefix": "z6M"}}
 
@@ -29,7 +30,7 @@ def sync_resource(resource):
         details=resource_details(resource),
         url=resource_id_to_url(resource.get("id")),
         author=ResourceRecord.ResourceAuthor(
-            avatar=f"{settings.AVATAR_URL}?seed={scid}",
+            avatar=generate_avatar(scid),
             scid=scid,
             domain=domain,
             namespace=namespace,
@@ -59,10 +60,14 @@ def sync_did_info(state, logs, did_resources, witness_file, whois_presentation):
         logs=logs,
         witness_file=witness_file,
         whois_presentation=whois_presentation,
-        avatar=f"{settings.AVATAR_URL}?seed={scid}",
+        avatar=generate_avatar(scid),
         active=False if state.deactivated else True,
         witnesses=state.witness.get("witnesses", []) if state.witness else [],
         watchers=state.params.get("watchers", []),
+        # Additional state parameters
+        parameters=state.params if hasattr(state, 'params') and state.params else {},
+        version_id=state.version_id if hasattr(state, 'version_id') else "",
+        version_time=state.version_time if hasattr(state, 'version_time') else "",
         resources=[
             DidRecord.ResourceDetails(
                 type=resource.get("metadata").get("resourceType"),
@@ -102,10 +107,24 @@ def did_to_https(did):
 
 
 def beautify_date(value):
-    """Returns a human readable date from a ISO datetime string."""
-    date_str = value.split("T")[0]
-    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-    return date_obj.strftime("%B %d, %Y")
+    """Returns a human readable date and time from a ISO datetime string."""
+    try:
+        # Parse full ISO datetime with timezone
+        if "T" in value:
+            # Handle ISO format with timezone
+            if "+" in value or value.endswith("Z"):
+                date_obj = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            else:
+                date_obj = datetime.fromisoformat(value)
+        else:
+            # Fallback to just date
+            date_obj = datetime.strptime(value, "%Y-%m-%d")
+        
+        # Format as: Oct 21, 2025 14:30:45
+        return date_obj.strftime("%b %d, %Y %H:%M:%S")
+    except Exception:
+        # Fallback to original behavior if parsing fails
+        return value
 
 
 def resource_id_to_url(resource_id):

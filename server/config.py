@@ -15,6 +15,15 @@ load_dotenv(os.path.join(basedir, ".env"))
 
 templates = Jinja2Templates(directory="app/templates")
 
+# Add generate_avatar function to Jinja environment
+from app.avatar_generator import generate_avatar
+templates.env.globals['generate_avatar'] = generate_avatar
+
+class ServerModes:
+    TESTING='testing'
+    REGISTRY='registry'
+    WATCHER='watcher'
+
 
 class Settings(BaseSettings):
     """App settings."""
@@ -39,12 +48,16 @@ class Settings(BaseSettings):
 
     if POSTGRES_USER and POSTGRES_PASSWORD and POSTGRES_SERVER_NAME and POSTGRES_SERVER_PORT:
         logging.info(f"Using postgres storage: {POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}")
-        ASKAR_DB: str = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}/didwebvh-server"
+        DATABASE_URL: str = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER_NAME}:{POSTGRES_SERVER_PORT}/didwebvh-server"
+        ASKAR_DB: str = DATABASE_URL  # Postgres URL format is the same for both
     else:
         logging.info("Using SQLite database")
-        ASKAR_DB: str = "sqlite://app.db"
+        DATABASE_URL: str = "sqlite:///app.db"  # SQLAlchemy format (3 slashes)
+        ASKAR_DB: str = "sqlite://app.db"  # Askar format (2 slashes)
 
     ENABLE_TAILS: bool = eval(os.environ.get("ENABLE_TAILS", "false").capitalize())
+
+    WEBVH_SERVER_MODE: str = os.environ.get("WEBVH_SERVER_MODE", ServerModes.REGISTRY)
 
     # Recommended for production deployments
 
@@ -59,17 +72,29 @@ class Settings(BaseSettings):
     WEBVH_ENDORSEMENT: bool = eval(os.environ.get("WEBVH_ENDORSEMENT", "false").capitalize())
 
     WEBVH_ICON: str = "https://didwebvh.info/latest/assets/favicon.ico"
+    WEBVH_LOGO: str = "https://raw.githubusercontent.com/decentralized-identity/didwebvh-info/main/docs/assets/didwebvh.jpg"
     BRANDING: dict = {
-        "app_name": "DID WebVH Explorer",
-        "app_description": "Visual user inteface to query DID WebVH logs and Attested Resources.",
+        "app_name": os.environ.get("APP_NAME", "DID WebVH Explorer"),
+        "app_description": os.environ.get("APP_DESCRIPTION", "Visual user interface to query DID WebVH logs and Attested Resources."),
         "app_icon": os.environ.get("APP_ICON", WEBVH_ICON),
-        "app_logo": os.environ.get("APP_LOGO", WEBVH_ICON),
+        "app_logo": os.environ.get("APP_LOGO", WEBVH_LOGO),
         "app_url": f"https://{DOMAIN}",
+        # Color scheme - Default WebVH Theme
+        "primary_color": os.environ.get("APP_PRIMARY_COLOR", "#1a365d"),    # WebVH Deep Blue
+        "secondary_color": os.environ.get("APP_SECONDARY_COLOR", "#38a169"),  # WebVH Green
+        "accent_color": os.environ.get("APP_ACCENT_COLOR", "#3182ce"),     # WebVH Blue
+        # Features
+        "show_witness_network": eval(os.environ.get("APP_SHOW_WITNESS_NETWORK", "true").capitalize()),
+        "show_version_history": eval(os.environ.get("APP_SHOW_VERSION_HISTORY", "true").capitalize()),
+        "show_resources": eval(os.environ.get("APP_SHOW_RESOURCES", "true").capitalize()),
     }
     AVATAR_URL: str = "https://api.dicebear.com/9.x/identicon/svg"
     UNIRESOLVER_URL: str = "https://dev.uniresolver.io"
 
     RESERVED_NAMESPACES: list = ["explorer", "admin", "server", "tails"]
+    
+    # Storage backend selection
+    STORAGE_BACKEND: str = os.environ.get("STORAGE_BACKEND", "askar")  # "askar" or "postgres"
 
 
 settings = Settings()
