@@ -5,12 +5,13 @@ from fastapi.responses import JSONResponse
 
 from app.plugins import AskarStorage, DidWebVH
 from app.plugins.storage import StorageManager
-from app.db.models import DidControllerRecord
+from app.db.models import DidControllerRecord, AttestedResourceRecord
 from app.db.explorer_models import ExplorerResourceRecord
 from app.utilities import beautify_date, resource_details, resource_id_to_url
 from app.avatar_generator import generate_avatar
 
 from config import templates, settings
+from sqlalchemy import func
 
 router = APIRouter(tags=["Explorer"])
 askar = AskarStorage()
@@ -150,7 +151,7 @@ async def explorer_resource_table(
     limit: int = 50,
 ):
     """Resource table with pagination."""
-    # Build filters for StorageManager query
+    # Build filters (route-level)
     filters = {}
     if scid:
         filters["scid"] = scid
@@ -158,38 +159,72 @@ async def explorer_resource_table(
         filters["resource_id"] = resource_id
     if resource_type:
         filters["resource_type"] = resource_type
-    
+
     # Calculate offset
     offset = (page - 1) * limit
-    
-    # Get total count for pagination
-    total = storage.count_resources(filters)
-    total_pages = (total + limit - 1) // limit  # Ceiling division
-    
-    # Get paginated results from AttestedResourceRecord
-    resource_records = storage.get_resources(filters, limit=limit, offset=offset)
-    
-    # Format results for explorer UI (compute on-the-fly)
+
+    # Temporary Postgres compatibility fallback:
+    # Select only columns that are guaranteed to exist to avoid selecting
+    # a missing 'did' column in older deployments.
+    with storage.get_session() as session:
+        # Base selectable columns (exclude AttestedResourceRecord.did)
+        base_query = session.query(
+            AttestedResourceRecord.resource_id,
+            AttestedResourceRecord.scid,
+            AttestedResourceRecord.resource_type,
+            AttestedResourceRecord.resource_name,
+            AttestedResourceRecord.attested_resource,
+            AttestedResourceRecord.media_type,
+        )
+
+        count_query = session.query(func.count()).select_from(AttestedResourceRecord)
+
+        # Apply filters consistently
+        if "scid" in filters:
+            base_query = base_query.filter(AttestedResourceRecord.scid == filters["scid"])
+            count_query = count_query.filter(AttestedResourceRecord.scid == filters["scid"])
+        if "resource_id" in filters:
+            base_query = base_query.filter(AttestedResourceRecord.resource_id == filters["resource_id"])
+            count_query = count_query.filter(AttestedResourceRecord.resource_id == filters["resource_id"])
+        if "resource_type" in filters:
+            base_query = base_query.filter(AttestedResourceRecord.resource_type == filters["resource_type"])
+            count_query = count_query.filter(AttestedResourceRecord.resource_type == filters["resource_type"])
+
+        total = count_query.scalar() or 0
+        total_pages = (total + limit - 1) // limit if limit else 1
+
+        rows = base_query.offset(offset).limit(limit).all()
+
+    # Format results for explorer UI (compute missing 'did' from attested_resource.id)
     formatted_results = []
-    for r in resource_records:
+    for row in rows:
+        attested_res = row.attested_resource or {}
+        res_id_full = attested_res.get("id", "")
+        # Derive DID from resource id if present: did:webvh:.../resources/<digest>
+        did_from_id = res_id_full.split("/resources/")[0] if "/resources/" in res_id_full else ""
+        did_parts = did_from_id.split(":") if did_from_id else []
+        domain = did_parts[3] if len(did_parts) >= 4 else ""
+        namespace = did_parts[4] if len(did_parts) >= 5 else ""
+        alias = did_parts[5] if len(did_parts) >= 6 else ""
+
         formatted_results.append({
             # Basic info
-            "did": r.did,
-            "scid": r.scid,
-            "resource_id": r.resource_id,
-            "resource_type": r.resource_type,
-            "resource_name": r.resource_name,  # Add resource_name field
-            
+            "did": did_from_id,
+            "scid": row.scid,
+            "resource_id": row.resource_id,
+            "resource_type": row.resource_type,
+            "resource_name": row.resource_name,
+
             # Computed fields
-            "attested_resource": r.attested_resource,
-            "details": resource_details(r.attested_resource),
-            "url": resource_id_to_url(r.attested_resource.get("id")),
+            "attested_resource": attested_res,
+            "details": resource_details(attested_res),
+            "url": resource_id_to_url(res_id_full) if res_id_full else "",
             "author": {
-                "avatar": generate_avatar(r.scid),
-                "scid": r.scid,
-                "domain": r.did.split(":")[3] if len(r.did.split(":")) >= 4 else "",
-                "namespace": r.did.split(":")[4] if len(r.did.split(":")) >= 5 else "",
-                "alias": r.did.split(":")[5] if len(r.did.split(":")) >= 6 else "",
+                "avatar": generate_avatar(row.scid),
+                "scid": row.scid,
+                "domain": domain,
+                "namespace": namespace,
+                "alias": alias,
             }
         })
     
