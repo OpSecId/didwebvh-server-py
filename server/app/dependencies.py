@@ -2,16 +2,18 @@
 
 from fastapi import HTTPException
 
-from app.plugins import AskarStorage
+from app.plugins.storage import StorageManager
 
 
-async def identifier_available(did: str):
+def identifier_available(namespace: str, alias: str):
     """Check if a DID identifier is available."""
-    if await AskarStorage().fetch("didDocument", did):
+    storage = StorageManager()
+    if storage.get_did_controller_by_alias(namespace, alias):
         raise HTTPException(status_code=409, detail="Identifier unavailable.")
 
 
-async def did_document_exists(did: str):
-    """Check if a DID document exists."""
-    if not await AskarStorage().fetch("didDocument", did):
-        raise HTTPException(status_code=404, detail="Resource not found.")
+def did_controller_exists(namespace: str, alias: str):
+    """Check if a DID controller exists."""
+    storage = StorageManager()
+    if not storage.get_did_controller_by_alias(namespace, alias):
+        raise HTTPException(status_code=404, detail="DID not found.")

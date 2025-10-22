@@ -448,8 +448,8 @@
                                                         </span>
                                                         <div class="flex-fill">
                                                             <div class="fw-bold">Resolve DID</div>
-                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
-                                                                {{ did.links.resolver }}
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem; max-width: 300px;">
+                                                                {{ did.links.resolver | truncate(60) }}
                                                             </div>
                                                         </div>
                                                         <span class="badge badge-sm bg-blue-lt">External</span>
@@ -462,8 +462,8 @@
                                                         </span>
                                                         <div class="flex-fill">
                                                             <div class="fw-bold">Log File</div>
-                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
-                                                                {{ did.links.log_file }}
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem; max-width: 300px;">
+                                                                {{ did.links.log_file | truncate(60) }}
                                                             </div>
                                                         </div>
                                                         <span class="badge badge-sm bg-green-lt">External</span>
@@ -476,8 +476,8 @@
                                                         </span>
                                                         <div class="flex-fill">
                                                             <div class="fw-bold">Witness File</div>
-                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
-                                                                {{ did.links.witness_file }}
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem; max-width: 300px;">
+                                                                {{ did.links.witness_file | truncate(60) }}
                                                             </div>
                                                         </div>
                                                         <span class="badge badge-sm bg-orange-lt">External</span>
@@ -490,8 +490,8 @@
                                                         </span>
                                                         <div class="flex-fill">
                                                             <div class="fw-bold">Whois Presentation</div>
-                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
-                                                                {{ did.links.whois }}
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem; max-width: 300px;">
+                                                                {{ did.links.whois | truncate(60) }}
                                                             </div>
                                                         </div>
                                                         <span class="badge badge-sm bg-purple-lt">External</span>

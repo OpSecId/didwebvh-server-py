@@ -181,7 +181,7 @@ class AskarVerifier:
         except AssertionError as msg:
             raise HTTPException(status_code=400, detail=str(msg))
 
-    async def verify_resource_proof(self, resource):
+    def verify_resource_proof(self, resource):
         """Verify the proof."""
         proof = resource.pop("proof")
         if (
@@ -194,13 +194,17 @@ class AskarVerifier:
         did = proof.get("verificationMethod").split("#")[0]
         namespace = did.split(":")[4]
         identifier = did.split(":")[5]
-        profile_id = f"{namespace}:{identifier}"
-        issuer_log = await AskarStorage().fetch("logEntries", profile_id)
+        
+        # Get DID controller from new storage
+        from app.plugins.storage import StorageManager
+        storage = StorageManager()
+        did_controller = storage.get_did_controller_by_alias(namespace, identifier)
 
-        if not issuer_log:
+        if not did_controller:
             raise HTTPException(status_code=400, detail="Unknown controller")
 
-        did_document = issuer_log[-1].get("state")
+        # Get did_document from document_state
+        did_document = did_controller.document_state
         multikey = next(
             (
                 vm["publicKeyMultibase"]

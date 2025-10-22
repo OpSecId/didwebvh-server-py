@@ -93,6 +93,8 @@ class Settings(BaseSettings):
         "show_witness_network": eval(os.environ.get("APP_SHOW_WITNESS_NETWORK", "true").capitalize()),
         "show_version_history": eval(os.environ.get("APP_SHOW_VERSION_HISTORY", "true").capitalize()),
         "show_resources": eval(os.environ.get("APP_SHOW_RESOURCES", "true").capitalize()),
+        # Demo links
+        "demo_anoncreds_url": os.environ.get("DEMO_ANONCREDS", ""),
     }
     AVATAR_URL: str = "https://api.dicebear.com/9.x/identicon/svg"
     UNIRESOLVER_URL: str = "https://dev.uniresolver.io"

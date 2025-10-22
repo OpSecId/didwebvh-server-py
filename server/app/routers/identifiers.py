@@ -41,15 +41,34 @@ async def get_did_controller_dependency(
 @router.get("/")
 async def request_did(
     namespace: str = None,
+    ns: str = None,
     identifier: str = None,
+    alias: str = None,
 ):
-    """Request a DID document and proof options for a given namespace and identifier."""
+    """Request a DID document and proof options for a given namespace and identifier.
+    
+    Query parameters:
+        namespace or ns: The DID namespace (use one, not both)
+        identifier or alias: The DID identifier/alias (use one, not both)
+    """
+
+    # Check if both namespace and ns are provided
+    if namespace and ns:
+        raise HTTPException(status_code=400, detail="Provide either 'namespace' or 'ns', not both.")
+    
+    # Check if both identifier and alias are provided
+    if identifier and alias:
+        raise HTTPException(status_code=400, detail="Provide either 'identifier' or 'alias', not both.")
+    
+    # Use whichever is provided
+    namespace = namespace or ns
+    identifier = identifier or alias
 
     if not namespace and not identifier:
         return RedirectResponse(url="/explorer", status_code=302)
 
     if not namespace or not identifier:
-        raise HTTPException(status_code=400, detail="Missing namespace or identifier query.")
+        raise HTTPException(status_code=400, detail="Missing namespace/ns and identifier/alias query parameters.")
 
     # Check if identifier already exists in database
     if storage.get_did_controller_by_alias(namespace, identifier):
@@ -86,6 +105,7 @@ async def new_log_entry(
 
     # Get existing DID controller if it exists
     did_controller = storage.get_did_controller_by_alias(namespace, identifier)
+    
     prev_log_entries = did_controller.logs if did_controller else []
     prev_witness_file = did_controller.witness_file if did_controller else None
 
@@ -98,30 +118,12 @@ async def new_log_entry(
     # Create DID
     if not prev_log_entries:
         try:
-            log_entries, witness_file = await webvh.create_did(log_entry, witness_signature)
+            log_entries, witness_file = await webvh.validate_did_request(log_entry, witness_signature)
         except PolicyError as err:
             raise HTTPException(status_code=400, detail=f"Policy infraction: {err}")
 
-        # Get document state and create DID controller record
-        state = webvh.get_document_state(log_entries)
-        did = state.document_id
-        _, _, scid, domain, namespace, alias = did.split(":")
-
-
-        # Create DID controller in database
-        storage.create_did_controller(
-            scid=scid,
-            did=did,
-            domain=domain,
-            namespace=namespace,
-            alias=alias,
-            logs=log_entries,
-            witness_file=witness_file,
-            whois_presentation={},
-            parameters=state.params if hasattr(state, 'params') else state.parameters,
-            document_state=state.document if isinstance(state.document, dict) else state.document.model_dump() if hasattr(state.document, 'model_dump') else dict(state.document),
-            deactivated=False
-        )
+        # Create DID controller in database (extracts all data from logs)
+        storage.create_did_controller(log_entries, witness_file)
 
         return JSONResponse(status_code=201, content=log_entries[-1])
 
@@ -134,21 +136,8 @@ async def new_log_entry(
             prev_witness_file=prev_witness_file,
         )
 
-        # Get document state and create DID controller record
-        state = webvh.get_document_state(log_entries)
-        did = state.document_id
-        _, _, scid, domain, namespace, alias = did.split(":")
-
-        # Update DID controller in database
-        storage.update_did_controller(
-            scid=scid,
-            logs=log_entries,
-            witness_file=witness_file,
-            whois_presentation=did_controller.whois_presentation,
-            parameters=state.params if hasattr(state, 'params') else state.parameters,
-            document_state=state.document if isinstance(state.document, dict) else state.document.model_dump() if hasattr(state.document, 'model_dump') else dict(state.document),
-            deactivated=log_entries[-1].get("parameters", {}).get("deactivated", False)
-        )
+        # Update DID controller in database (re-extracts state from logs)
+        storage.update_did_controller(did_controller.scid, log_entries, witness_file)
         
     except PolicyError as err:
         raise HTTPException(status_code=400, detail=f"Policy infraction: {err}")

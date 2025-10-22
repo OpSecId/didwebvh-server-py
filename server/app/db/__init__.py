@@ -24,6 +24,7 @@ from .base import Base
 from .models import (
     DidControllerRecord,
     AttestedResourceRecord,
+    VerifiableCredentialRecord,
     AdminBackgroundTask,
     ServerPolicy,
     KnownWitnessRegistry,
@@ -35,6 +36,7 @@ __all__ = [
     "Base",
     "DidControllerRecord",
     "AttestedResourceRecord",
+    "VerifiableCredentialRecord",
     "AdminBackgroundTask",
     "ServerPolicy",
     "KnownWitnessRegistry",

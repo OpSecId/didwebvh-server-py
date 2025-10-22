@@ -7,7 +7,7 @@ from .did_document import SecuredDidDocument
 from .resource import AttestedResource
 from .did_log import LogEntry, WitnessSignature
 from .di_proof import DataIntegrityProof
-from .presentation import VerifiablePresentation
+from .presentation import VerifiablePresentation, VerifiableCredential
 from .base import CustomBaseModel
 
 
@@ -84,6 +84,13 @@ class ResourceUpload(CustomBaseModel):
     """ResourceUpload model."""
 
     attestedResource: AttestedResource = Field()
+    options: ResourceOptions = Field(None)
+
+
+class CredentialUpload(CustomBaseModel):
+    """CredentialUpload model."""
+
+    verifiableCredential: VerifiableCredential = Field()
     options: ResourceOptions = Field(None)
 
 

@@ -222,8 +222,8 @@
                                                         </span>
                                                         <div class="flex-fill">
                                                             <div class="fw-bold">Fetch Resource</div>
-                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem;">
-                                                                {{ resource.url }}
+                                                            <div class="text-secondary text-truncate" style="font-size: 0.75rem; max-width: 300px;">
+                                                                {{ resource.url | truncate(60) }}
                                                             </div>
                                                         </div>
                                                         <span class="badge badge-sm bg-blue-lt">External</span>

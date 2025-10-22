@@ -11,6 +11,7 @@ from app.db.base import Base
 from app.db.models import (
     DidControllerRecord,
     AttestedResourceRecord,
+    VerifiableCredentialRecord,
     AdminBackgroundTask,
     ServerPolicy,
     KnownWitnessRegistry,
@@ -157,13 +158,35 @@ class StorageManager:
 
     # ========== DID Controller Operations ==========
 
-    def create_did_controller(self, scid: str, did: str, domain: str, namespace: str,
-                             alias: str, logs: List[Dict], parameters: Dict, document_state: Dict,
+    def create_did_controller(self, logs: List[Dict],
                              witness_file: Optional[List[Dict]] = None, 
-                             whois_presentation: Optional[Dict] = None,
-                             deactivated: bool = False) -> DidControllerRecord:
-        """Create a new DID controller record with all associated data."""
+                             whois_presentation: Optional[Dict] = None) -> DidControllerRecord:
+        """Create a new DID controller record - extracts all data from logs.
+        
+        Args:
+            logs: Log entries (required - contains all DID info)
+            witness_file: Optional witness file
+            whois_presentation: Optional WHOIS presentation
+            
+        Returns:
+            DidControllerRecord: The created record
+        """
+        from app.plugins import DidWebVH
+        
         with self.get_session() as session:
+            # Extract DID information from logs
+            webvh = DidWebVH()
+            state = webvh.get_document_state(logs)
+            
+            # Parse DID components
+            did = state.document_id
+            _, _, scid, domain, namespace, alias = did.split(":")
+            
+            # Extract deactivated status from parameters
+            params = state.params if hasattr(state, 'params') else state.parameters
+            deactivated = params.get("deactivated", False) if params else False
+            
+            # Create controller
             controller = DidControllerRecord(
                 scid=scid,
                 did=did,
@@ -174,8 +197,8 @@ class StorageManager:
                 logs=logs,
                 witness_file=witness_file,
                 whois_presentation=whois_presentation,
-                parameters=parameters,
-                document_state=document_state
+                parameters=params,
+                document_state=state.document if isinstance(state.document, dict) else state.document.model_dump() if hasattr(state.document, 'model_dump') else dict(state.document)
             )
             session.add(controller)
             session.commit()
@@ -184,29 +207,91 @@ class StorageManager:
 
     def update_did_controller(self, scid: str, logs: Optional[List[Dict]] = None,
                              witness_file: Optional[List[Dict]] = None,
-                             whois_presentation: Optional[Dict] = None,
-                             parameters: Optional[Dict] = None,
-                             document_state: Optional[Dict] = None,
-                             deactivated: Optional[bool] = None) -> Optional[DidControllerRecord]:
-        """Update an existing DID controller record."""
+                             whois_presentation: Optional[Dict] = None) -> Optional[DidControllerRecord]:
+        """Update an existing DID controller record - re-extracts data from logs if provided.
+        
+        Args:
+            scid: The SCID of the controller to update
+            logs: Optional new log entries (if provided, re-extracts state/parameters/deactivated)
+            witness_file: Optional witness file
+            whois_presentation: Optional WHOIS presentation
+            
+        Returns:
+            Optional[DidControllerRecord]: The updated record or None if not found
+        """
+        from app.plugins import DidWebVH
+        
         with self.get_session() as session:
             controller = session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
             if controller:
+                # Update logs and re-extract derived data
                 if logs is not None:
                     controller.logs = logs
+                    
+                    # Re-extract state and parameters from updated logs
+                    webvh = DidWebVH()
+                    state = webvh.get_document_state(logs)
+                    params = state.params if hasattr(state, 'params') else state.parameters
+                    
+                    controller.parameters = params
+                    controller.document_state = state.document if isinstance(state.document, dict) else state.document.model_dump() if hasattr(state.document, 'model_dump') else dict(state.document)
+                    controller.deactivated = params.get("deactivated", False) if params else False
+                
+                # Update optional fields
                 if witness_file is not None:
                     controller.witness_file = witness_file
                 if whois_presentation is not None:
                     controller.whois_presentation = whois_presentation
-                if parameters is not None:
-                    controller.parameters = parameters
-                if document_state is not None:
-                    controller.document_state = document_state
-                if deactivated is not None:
-                    controller.deactivated = deactivated
+                    
                 session.commit()
                 session.refresh(controller)
             return controller
+    def get_did_controllers(self, filters: Optional[Dict[str, Any]] = None, 
+                           limit: Optional[int] = None, offset: int = 0) -> List[DidControllerRecord]:
+        """Get DID controllers with optional filters and pagination."""
+        with self.get_session() as session:
+            query = session.query(DidControllerRecord)
+            
+            if filters:
+                if 'scid' in filters:
+                    query = query.filter(DidControllerRecord.scid == filters['scid'])
+                if 'did' in filters:
+                    query = query.filter(DidControllerRecord.did == filters['did'])
+                if 'domain' in filters:
+                    query = query.filter(DidControllerRecord.domain == filters['domain'])
+                if 'namespace' in filters:
+                    query = query.filter(DidControllerRecord.namespace == filters['namespace'])
+                if 'alias' in filters:
+                    query = query.filter(DidControllerRecord.alias == filters['alias'])
+                if 'deactivated' in filters:
+                    query = query.filter(DidControllerRecord.deactivated == filters['deactivated'])
+            
+            if limit is not None:
+                query = query.offset(offset).limit(limit)
+            
+            return query.all()
+
+    def count_did_controllers(self, filters: Optional[Dict[str, Any]] = None) -> int:
+        """Count DID controllers with optional filters."""
+        with self.get_session() as session:
+            query = session.query(DidControllerRecord)
+            
+            if filters:
+                if 'scid' in filters:
+                    query = query.filter(DidControllerRecord.scid == filters['scid'])
+                if 'did' in filters:
+                    query = query.filter(DidControllerRecord.did == filters['did'])
+                if 'domain' in filters:
+                    query = query.filter(DidControllerRecord.domain == filters['domain'])
+                if 'namespace' in filters:
+                    query = query.filter(DidControllerRecord.namespace == filters['namespace'])
+                if 'alias' in filters:
+                    query = query.filter(DidControllerRecord.alias == filters['alias'])
+                if 'deactivated' in filters:
+                    query = query.filter(DidControllerRecord.deactivated == filters['deactivated'])
+            
+            return query.count()
+
 
 
     def create_log_entry(self, scid: str, did: str, domain: str, namespace: str, 
@@ -276,33 +361,50 @@ class StorageManager:
 
     # ========== AttestedResourceRecord Operations ==========
 
-    def create_resource(self, resource_id: str, scid: str, did: str, 
-                       resource_type: str, resource_name: str,
-                       content: Dict, metadata: Dict, proof: Optional[Dict] = None) -> AttestedResourceRecord:
-        """Create a new resource."""
+    def create_resource(self, scid: str, attested_resource: Dict) -> AttestedResourceRecord:
+        """Create a new resource - extracts metadata from attested_resource.
+        
+        Args:
+            scid: The SCID from the parent DidControllerRecord (FK relationship)
+            attested_resource: The full attested resource object
+            
+        Returns:
+            AttestedResourceRecord: The created record
+        """
         with self.get_session() as session:
+            # Extract metadata
+            metadata = attested_resource.get("metadata", {})
+            resource_id = metadata.get("resourceId")
+            resource_type = metadata.get("resourceType", "")
+            resource_name = metadata.get("resourceName", "")
+            
+            # Extract DID from proof
+            proof = attested_resource.get("proof", {})
+            verification_method = proof.get("verificationMethod", "")
+            did = verification_method.split("#")[0]
+            
             resource = AttestedResourceRecord(
                 resource_id=resource_id,
                 scid=scid,
                 did=did,
                 resource_type=resource_type,
                 resource_name=resource_name,
-                content=content,
-                resource_metadata=metadata,
-                proof=proof
+                attested_resource=attested_resource
             )
             session.add(resource)
             session.commit()
             session.refresh(resource)
             return resource
 
+
     def get_resource(self, resource_id: str) -> Optional[AttestedResourceRecord]:
         """Get a resource by ID."""
         with self.get_session() as session:
             return session.query(AttestedResourceRecord).filter(AttestedResourceRecord.resource_id == resource_id).first()
 
-    def get_resources(self, filters: Optional[Dict[str, Any]] = None) -> List[AttestedResourceRecord]:
-        """Get resources with optional filters."""
+    def get_resources(self, filters: Optional[Dict[str, Any]] = None,
+                     limit: Optional[int] = None, offset: int = 0) -> List[AttestedResourceRecord]:
+        """Get resources with optional filters and pagination."""
         with self.get_session() as session:
             query = session.query(AttestedResourceRecord)
             
@@ -313,24 +415,51 @@ class StorageManager:
                     query = query.filter(AttestedResourceRecord.did == filters['did'])
                 if 'resource_type' in filters:
                     query = query.filter(AttestedResourceRecord.resource_type == filters['resource_type'])
+                if 'resource_id' in filters:
+                    query = query.filter(AttestedResourceRecord.resource_id == filters['resource_id'])
+            
+            if limit is not None:
+                query = query.offset(offset).limit(limit)
             
             return query.all()
 
-    def update_resource(self, resource_id: str, content: Optional[Dict] = None,
-                       metadata: Optional[Dict] = None, proof: Optional[Dict] = None) -> Optional[AttestedResourceRecord]:
-        """Update an existing resource."""
+    def count_resources(self, filters: Optional[Dict[str, Any]] = None) -> int:
+        """Count resources with optional filters."""
         with self.get_session() as session:
+            query = session.query(AttestedResourceRecord)
+            
+            if filters:
+                if 'scid' in filters:
+                    query = query.filter(AttestedResourceRecord.scid == filters['scid'])
+                if 'did' in filters:
+                    query = query.filter(AttestedResourceRecord.did == filters['did'])
+                if 'resource_type' in filters:
+                    query = query.filter(AttestedResourceRecord.resource_type == filters['resource_type'])
+                if 'resource_id' in filters:
+                    query = query.filter(AttestedResourceRecord.resource_id == filters['resource_id'])
+            
+            return query.count()
+
+    def update_resource(self, attested_resource: Dict) -> Optional[AttestedResourceRecord]:
+        """Update an existing resource - extracts resource_id from attested_resource.
+        
+        Args:
+            attested_resource: The full attested resource object
+            
+        Returns:
+            Optional[AttestedResourceRecord]: The updated record or None if not found
+        """
+        with self.get_session() as session:
+            # Extract resource_id from metadata
+            resource_id = attested_resource.get("metadata", {}).get("resourceId")
+            
             resource = session.query(AttestedResourceRecord).filter(AttestedResourceRecord.resource_id == resource_id).first()
             if resource:
-                if content is not None:
-                    resource.content = content
-                if metadata is not None:
-                    resource.resource_metadata = metadata
-                if proof is not None:
-                    resource.proof = proof
+                resource.attested_resource = attested_resource
                 session.commit()
                 session.refresh(resource)
             return resource
+
 
     def delete_resource(self, resource_id: str) -> bool:
         """Delete a resource."""
@@ -338,6 +467,197 @@ class StorageManager:
             resource = session.query(AttestedResourceRecord).filter(AttestedResourceRecord.resource_id == resource_id).first()
             if resource:
                 session.delete(resource)
+                session.commit()
+                return True
+            return False
+
+    # ========== Credential Operations ==========
+
+    def create_credential(self, scid: str, verifiable_credential: Dict) -> VerifiableCredentialRecord:
+        """Create a new verifiable credential - extracts metadata from verifiable_credential.
+        
+        Args:
+            scid: The SCID from the parent DidControllerRecord (FK relationship)
+            verifiable_credential: The full verifiable credential object
+            
+        Returns:
+            VerifiableCredentialRecord: The created record
+        """
+        from dateutil import parser as date_parser
+        
+        with self.get_session() as session:
+            # Extract credential ID
+            credential_id = verifiable_credential.get("id")
+            if not credential_id:
+                raise ValueError("Credential must have an 'id' field")
+            
+            # Extract issuer DID
+            issuer = verifiable_credential.get("issuer")
+            if isinstance(issuer, dict):
+                issuer_did = issuer.get("id")
+            else:
+                issuer_did = issuer
+            
+            # Extract credential type
+            credential_type = verifiable_credential.get("type", [])
+            if isinstance(credential_type, str):
+                credential_type = [credential_type]
+            
+            # Extract subject ID if present
+            subject = verifiable_credential.get("credentialSubject", {})
+            if isinstance(subject, list):
+                subject_id = subject[0].get("id") if subject and len(subject) > 0 else None
+            elif isinstance(subject, dict):
+                subject_id = subject.get("id")
+            else:
+                subject_id = None
+            
+            # Parse validity dates if present
+            valid_from = None
+            valid_until = None
+            if verifiable_credential.get("validFrom"):
+                try:
+                    valid_from = date_parser.parse(verifiable_credential["validFrom"])
+                except Exception:
+                    pass
+            if verifiable_credential.get("validUntil"):
+                try:
+                    valid_until = date_parser.parse(verifiable_credential["validUntil"])
+                except Exception:
+                    pass
+            
+            credential = VerifiableCredentialRecord(
+                credential_id=credential_id,
+                scid=scid,
+                issuer_did=issuer_did,
+                credential_type=credential_type,
+                subject_id=subject_id,
+                verifiable_credential=verifiable_credential,
+                valid_from=valid_from,
+                valid_until=valid_until,
+                revoked=False
+            )
+            session.add(credential)
+            session.commit()
+            session.refresh(credential)
+            return credential
+
+    def get_credential(self, credential_id: str) -> Optional[VerifiableCredentialRecord]:
+        """Get a credential by ID."""
+        with self.get_session() as session:
+            return session.query(VerifiableCredentialRecord).filter(
+                VerifiableCredentialRecord.credential_id == credential_id
+            ).first()
+
+    def get_credentials(self, filters: Optional[Dict[str, Any]] = None, 
+                       limit: Optional[int] = None, offset: int = 0) -> List[VerifiableCredentialRecord]:
+        """Get credentials with optional filters and pagination."""
+        with self.get_session() as session:
+            query = session.query(VerifiableCredentialRecord)
+            
+            # Join with DidControllerRecord if filtering by namespace or alias
+            needs_join = filters and ('namespace' in filters or 'alias' in filters)
+            if needs_join:
+                query = query.join(
+                    DidControllerRecord,
+                    VerifiableCredentialRecord.scid == DidControllerRecord.scid
+                )
+            
+            if filters:
+                if 'scid' in filters:
+                    query = query.filter(VerifiableCredentialRecord.scid == filters['scid'])
+                if 'issuer_did' in filters:
+                    query = query.filter(VerifiableCredentialRecord.issuer_did == filters['issuer_did'])
+                if 'subject_id' in filters:
+                    query = query.filter(VerifiableCredentialRecord.subject_id == filters['subject_id'])
+                if 'revoked' in filters:
+                    query = query.filter(VerifiableCredentialRecord.revoked == filters['revoked'])
+                if 'namespace' in filters:
+                    query = query.filter(DidControllerRecord.namespace == filters['namespace'])
+                if 'alias' in filters:
+                    query = query.filter(DidControllerRecord.alias == filters['alias'])
+            
+            if limit is not None:
+                query = query.offset(offset).limit(limit)
+            
+            return query.all()
+
+    def count_credentials(self, filters: Optional[Dict[str, Any]] = None) -> int:
+        """Count credentials with optional filters."""
+        with self.get_session() as session:
+            query = session.query(VerifiableCredentialRecord)
+            
+            # Join with DidControllerRecord if filtering by namespace or alias
+            needs_join = filters and ('namespace' in filters or 'alias' in filters)
+            if needs_join:
+                query = query.join(
+                    DidControllerRecord,
+                    VerifiableCredentialRecord.scid == DidControllerRecord.scid
+                )
+            
+            if filters:
+                if 'scid' in filters:
+                    query = query.filter(VerifiableCredentialRecord.scid == filters['scid'])
+                if 'issuer_did' in filters:
+                    query = query.filter(VerifiableCredentialRecord.issuer_did == filters['issuer_did'])
+                if 'subject_id' in filters:
+                    query = query.filter(VerifiableCredentialRecord.subject_id == filters['subject_id'])
+                if 'revoked' in filters:
+                    query = query.filter(VerifiableCredentialRecord.revoked == filters['revoked'])
+                if 'namespace' in filters:
+                    query = query.filter(DidControllerRecord.namespace == filters['namespace'])
+                if 'alias' in filters:
+                    query = query.filter(DidControllerRecord.alias == filters['alias'])
+            
+            return query.count()
+
+    def update_credential(self, verifiable_credential: Dict) -> Optional[VerifiableCredentialRecord]:
+        """Update an existing credential - extracts credential_id from verifiable_credential.
+        
+        Args:
+            verifiable_credential: The full verifiable credential object
+            
+        Returns:
+            Optional[VerifiableCredentialRecord]: The updated record or None if not found
+        """
+        with self.get_session() as session:
+            credential_id = verifiable_credential.get("id")
+            if not credential_id:
+                raise ValueError("Credential must have an 'id' field")
+            
+            credential = session.query(VerifiableCredentialRecord).filter(
+                VerifiableCredentialRecord.credential_id == credential_id
+            ).first()
+            
+            if credential:
+                credential.verifiable_credential = verifiable_credential
+                session.commit()
+                session.refresh(credential)
+            
+            return credential
+
+    def revoke_credential(self, credential_id: str) -> bool:
+        """Mark a credential as revoked."""
+        with self.get_session() as session:
+            credential = session.query(VerifiableCredentialRecord).filter(
+                VerifiableCredentialRecord.credential_id == credential_id
+            ).first()
+            
+            if credential:
+                credential.revoked = True
+                session.commit()
+                return True
+            return False
+
+    def delete_credential(self, credential_id: str) -> bool:
+        """Delete a credential."""
+        with self.get_session() as session:
+            credential = session.query(VerifiableCredentialRecord).filter(
+                VerifiableCredentialRecord.credential_id == credential_id
+            ).first()
+            
+            if credential:
+                session.delete(credential)
                 session.commit()
                 return True
             return False

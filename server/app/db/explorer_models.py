@@ -39,12 +39,19 @@ class ExplorerDIDRecord(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
-    # Indexes for common queries
+    # Composite indexes for common query patterns
     __table_args__ = (
-        Index('idx_did_scid', 'scid'),
-        Index('idx_did_domain', 'domain'),
-        Index('idx_did_namespace', 'namespace'),
-        Index('idx_did_status', 'deactivated'),
+        # Common filters
+        Index('idx_explorer_did_namespace_deactivated', 'namespace', 'deactivated'),
+        Index('idx_explorer_did_domain_deactivated', 'domain', 'deactivated'),
+        Index('idx_explorer_did_namespace_identifier', 'namespace', 'identifier'),
+        Index('idx_explorer_did_scid_deactivated', 'scid', 'deactivated'),
+        # Single column indexes
+        Index('idx_explorer_did_scid', 'scid'),
+        Index('idx_explorer_did_domain', 'domain'),
+        Index('idx_explorer_did_namespace', 'namespace'),
+        Index('idx_explorer_did_identifier', 'identifier'),
+        Index('idx_explorer_did_status', 'deactivated'),
     )
 
 
@@ -69,11 +76,16 @@ class ExplorerResourceRecord(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
-    # Indexes
+    # Composite indexes for common query patterns
     __table_args__ = (
-        Index('idx_resource_scid', 'scid'),
-        Index('idx_resource_type', 'resource_type'),
-        Index('idx_resource_id', 'resource_id'),
+        # Common filters
+        Index('idx_explorer_resource_scid_type', 'scid', 'resource_type'),
+        Index('idx_explorer_resource_did_type', 'did', 'resource_type'),
+        # Single column indexes
+        Index('idx_explorer_resource_scid', 'scid'),
+        Index('idx_explorer_resource_type', 'resource_type'),
+        Index('idx_explorer_resource_id', 'resource_id'),
+        Index('idx_explorer_resource_did', 'did'),
     )
 
 

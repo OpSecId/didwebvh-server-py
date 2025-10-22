@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.7, pytest-8.4.2, pluggy-1.6.0 -- /home/development/repos/didwebvh-server-py/server/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/development/repos/didwebvh-server-py/server
+configfile: pyproject.toml
+plugins: dependency-0.6.0, anyio-4.11.0, asyncio-1.2.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 16 items
+
+tests/test_did_controller.py::test_create_did_controller PASSED          [  6%]
+tests/test_did_controller.py::test_get_did_controller_by_alias PASSED    [ 12%]
+tests/test_did_controller.py::test_update_did_controller PASSED          [ 18%]
+tests/test_did_controller.py::test_create_resource_with_fk PASSED        [ 25%]
+tests/test_did_controller.py::test_get_resources_by_scid PASSED          [ 31%]
+tests/test_did_controller.py::test_update_whois_presentation PASSED      [ 37%]
+tests/test_did_controller.py::test_query_by_namespace_and_deactivated PASSED [ 43%]
+tests/test_did_controller.py::test_update_resource PASSED                [ 50%]
+tests/test_did_controller.py::test_count_and_pagination PASSED           [ 56%]
+tests/test_routes_integration.py::test_create_and_retrieve_did PASSED    [ 62%]
+tests/test_routes_integration.py::test_resource_creation_requires_valid_did PASSED [ 68%]
+tests/test_routes_integration.py::test_explorer_shows_did_records PASSED [ 75%]
+tests/test_routes_integration.py::test_deactivated_flag_extracted PASSED [ 81%]
+tests/test_routes_integration.py::test_resource_foreign_key_integrity PASSED [ 87%]
+tests/test_routes_integration.py::test_composite_index_performance PASSED [ 93%]
+tests/test_routes_integration.py::test_simplified_api_signatures PASSED  [100%]
+
+============================== 16 passed in 4.83s ==============================

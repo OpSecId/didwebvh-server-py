@@ -190,7 +190,7 @@ class DidWebVH:
             witness_file.append(witness_signature)
         return witness_file
 
-    async def create_did(self, log_entry, witness_signature=None):
+    async def validate_did_request(self, log_entry, witness_signature=None):
         """Apply policies to DID creation."""
 
         document_state = self.get_document_state([log_entry])

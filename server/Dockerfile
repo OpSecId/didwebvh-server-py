@@ -16,5 +16,5 @@ COPY app ./app
 COPY config.py main.py init_db.py alembic.ini ./
 COPY alembic ./alembic
 
-# Run the application
-CMD ["uv", "run", "python", "main.py"]
+# Run the application using the synced environment (no reinstall on startup)
+CMD [".venv/bin/python", "main.py"]

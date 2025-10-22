@@ -3,14 +3,13 @@
 import asyncio
 import os
 import uuid
-import threading
 import uvicorn
 
 from dotenv import load_dotenv
 
 from app.plugins import AskarStorage
 from app.plugins.storage import StorageManager
-from app.tasks import TaskManager  # set_policies, sync_explorer_records
+from app.tasks import TaskManager
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, ".env"))
@@ -19,20 +18,22 @@ APP_PORT = int(os.getenv("APP_PORT", "8000"))
 APP_WORKERS = int(os.getenv("APP_WORKERS", "4"))
 
 
-class StartupBackgroundTasks(threading.Thread):
-    """Server startup background tasks."""
-
-    def run(self):
-        """Run tasks."""
-        # Provision databases
-        asyncio.run(AskarStorage().provision())
-        asyncio.run(StorageManager().provision())
-        
-        # Run startup tasks
-        asyncio.run(TaskManager(str(uuid.uuid4())).set_policies())
-        asyncio.run(TaskManager(str(uuid.uuid4())).sync_explorer_records())
+async def startup_tasks():
+    """Run startup tasks before server starts."""
+    # Provision databases (synchronously - must complete before server starts)
+    await AskarStorage().provision()
+    await StorageManager().provision(recreate=False)
+    
+    # Run startup tasks
+    await TaskManager(str(uuid.uuid4())).set_policies()
+    # await TaskManager(str(uuid.uuid4())).sync_explorer_records()
 
 
 if __name__ == "__main__":
-    StartupBackgroundTasks().start()
+    # Run startup tasks and wait for completion
+    print("Running startup tasks...")
+    asyncio.run(startup_tasks())
+    print("Startup tasks completed. Starting server...")
+    
+    # Start server
     uvicorn.run("app:app", host="0.0.0.0", port=APP_PORT, workers=APP_WORKERS, reload=True)

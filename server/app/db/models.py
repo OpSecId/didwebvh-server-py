@@ -25,7 +25,8 @@ class DidControllerRecord(Base):
     alias = Column(String(255), nullable=False, index=True)
     
     # Status
-    deactivated = Column(Boolean, default=False, index=True)
+    deactivated = Column(Boolean, default=False, index=True, nullable=False)
+    
 
     # Log file (list of log entries)
     logs = Column(JSON, nullable=False)
@@ -44,9 +45,12 @@ class DidControllerRecord(Base):
     created = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
-    # Composite indexes
+    # Composite indexes for common query patterns
     __table_args__ = (
-        Index('idx_namespace_alias', 'namespace', 'alias'),
+        Index('idx_controller_namespace_alias', 'namespace', 'alias'),
+        Index('idx_controller_namespace_deactivated', 'namespace', 'deactivated'),
+        Index('idx_controller_domain_deactivated', 'domain', 'deactivated'),
+        Index('idx_controller_alias_deactivated', 'alias', 'deactivated'),
     )
 
 
@@ -66,11 +70,60 @@ class AttestedResourceRecord(Base):
     resource_type = Column(String(100), nullable=False, index=True)
     resource_name = Column(String(255), nullable=False)
     
+    # DID reference (denormalized for queries)
+    did = Column(String(500), nullable=False, index=True)
+    
     # Resource data
     attested_resource = Column(JSON, nullable=False)
     
     # MediaType
     media_type = Column(String(255), nullable=False, default='application/jsonld')
+    
+    # Composite indexes for common queries
+    __table_args__ = (
+        Index('idx_attested_scid_resource_type', 'scid', 'resource_type'),
+        Index('idx_attested_did_resource_type', 'did', 'resource_type'),
+    )
+
+
+class VerifiableCredentialRecord(Base):
+    """Verifiable credentials table."""
+
+    __tablename__ = "verifiable_credentials"
+
+    # Primary key (credential ID)
+    credential_id = Column(String(500), primary_key=True, index=True)
+    
+    # Relationships - FK to DID controller (issuer)
+    scid = Column(String(255), ForeignKey('did_controllers.scid'), nullable=False, index=True)
+    
+    # DID reference (denormalized for queries)
+    issuer_did = Column(String(500), nullable=False, index=True)
+    
+    # Credential information
+    credential_type = Column(JSON, nullable=False)  # List of types
+    subject_id = Column(String(500), nullable=True, index=True)  # credentialSubject.id if present
+    
+    # Credential data (full VC)
+    verifiable_credential = Column(JSON, nullable=False)
+    
+    # Validity
+    valid_from = Column(DateTime(timezone=True), nullable=True)
+    valid_until = Column(DateTime(timezone=True), nullable=True)
+    
+    # Status
+    revoked = Column(Boolean, default=False, index=True, nullable=False)
+    
+    # Metadata
+    created = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+    # Composite indexes for common queries
+    __table_args__ = (
+        Index('idx_credential_scid_revoked', 'scid', 'revoked'),
+        Index('idx_credential_issuer_revoked', 'issuer_did', 'revoked'),
+        Index('idx_credential_subject_revoked', 'subject_id', 'revoked'),
+    )
 
 
 class AdminBackgroundTask(Base):

@@ -10,6 +10,7 @@ services:
       WEBVH_PREROTATION: false
       WEBVH_PORTABILITY: false
       WEBVH_ENDORSEMENT: false
+      DEMO_ANONCREDS: ${DEMO_ANONCREDS}
 
   witness-agent:
     build:
@@ -23,7 +24,7 @@ services:
     entrypoint: ["aca-py", "start"]
     command: [
       "--arg-file", "/home/aries/config.yml",
-      "--tails-server-base-url", "https://tails.anoncreds.vc"
+      "--tails-server-base-url", "https://${WEBVH_DOMAIN}/tails"
     ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8020/status/ready"]
@@ -32,18 +33,18 @@ services:
       retries: 3
       start_period: 5s
   
-  demo_script:
-    build:
-      context: .
-      dockerfile: Dockerfile.script
-    environment:
-      WATCHER_URL: ${WATCHER_URL}
-      WATCHER_API_KEY: ${WATCHER_API_KEY}
-      WEBVH_SERVER_URL: https://${WEBVH_DOMAIN}
-      AGENT_ADMIN_API_URL: http://witness-agent:8020
-    depends_on:
-      witness-agent:
-        condition: service_healthy
+  # demo_script:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.script
+  #   environment:
+  #     WATCHER_URL: ${WATCHER_URL}
+  #     WATCHER_API_KEY: ${WATCHER_API_KEY}
+  #     WEBVH_SERVER_URL: https://${WEBVH_DOMAIN}
+  #     AGENT_ADMIN_API_URL: http://witness-agent:8020
+  #   depends_on:
+  #     witness-agent:
+  #       condition: service_healthy
 
   ngrok:
     image: ngrok/ngrok:latest
@@ -65,7 +66,7 @@ configs:
       plugin:
         - webvh
       plugin-config-value:
-        - did-webvh.witness=true
-        - did-webvh.auto_attest=true
-        - did-webvh.endorsement=true
-        - did-webvh.server_url=https://${WEBVH_DOMAIN}
+        - webvh.witness=true
+        - webvh.auto_attest=true
+        - webvh.endorsement=true
+        - webvh.server_url=https://${WEBVH_DOMAIN}

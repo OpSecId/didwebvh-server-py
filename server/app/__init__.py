@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.routers import admin, identifiers, resources, explorer, tails
+from app.routers import admin, identifiers, resources, credentials, explorer, tails
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ api_router.include_router(tails.router, prefix="/tails", tags=["Tails"])
 api_router.include_router(explorer.router, prefix="/explorer", include_in_schema=False)
 api_router.include_router(admin.router, prefix="/admin")
 api_router.include_router(resources.router)
+api_router.include_router(credentials.router)
 api_router.include_router(identifiers.router)
 
 app.include_router(api_router)
