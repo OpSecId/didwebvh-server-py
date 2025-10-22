@@ -10,15 +10,35 @@ from .base import Base
 # These are forward references, actual assignments are at the end of this file
 
 
-class DidControllerRecord(Base):
-    """DID controller with all associated data."""
+class DidController(Base):
+    """Base class for all DID controller-related records."""
     
     __tablename__ = "did_controllers"
     
     # Primary key
     scid = Column(String(255), primary_key=True, index=True)
     
-    # DID information
+    # DID information (not primary key - each model defines its own)
+    did = Column(String(500), nullable=False, index=True)
+    domain = Column(String(255), nullable=False, index=True)
+    namespace = Column(String(255), nullable=False, index=True)
+    alias = Column(String(255), nullable=False, index=True)
+    
+    # Composite indexes
+    __table_args__ = (
+        Index('idx_namespace_alias', 'namespace', 'alias'),
+    )
+
+
+class LogFileRecord(Base):
+    """DID log entries table."""
+
+    __tablename__ = "log_files"
+    
+    # Primary key
+    scid = Column(String(255), ForeignKey('did_controllers.scid'), primary_key=True)
+    
+    # DID information (indexed for querying)
     did = Column(String(500), nullable=False, index=True)
     domain = Column(String(255), nullable=False, index=True)
     namespace = Column(String(255), nullable=False, index=True)
@@ -26,29 +46,74 @@ class DidControllerRecord(Base):
     
     # Status
     deactivated = Column(Boolean, default=False, index=True)
-
-    # Log file (list of log entries)
+    
+    # Data
     logs = Column(JSON, nullable=False)
+    state = Column(JSON, nullable=False)
+    # witness = Column(JSON, nullable=False)
+    parameters = Column(JSON, nullable=False)
     
-    # Witness file
-    witness_file = Column(JSON, nullable=True)
-    
-    # WHOIS presentation
-    whois_presentation = Column(JSON, nullable=True)
-    
-    # WebVH state and parameters
-    parameters = Column(JSON, nullable=False)   
-    document_state = Column(JSON, nullable=False)
-    
-    # Metadata
+    # Timestamps
     created = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     
+    # MediaType
+    media_type = Column(String(255), nullable=False, default="application/jsonl")
+    
     # Composite indexes
     __table_args__ = (
-        Index('idx_namespace_alias', 'namespace', 'alias'),
+        Index('idx_log_namespace_alias', 'namespace', 'alias'),
     )
 
+class WitnessFileRecord(Base):
+    """Witness files table."""
+
+    __tablename__ = "witness_files"
+    
+    # Primary key
+    scid = Column(String(255), primary_key=True, index=True)
+    
+    # DID information (indexed for querying)
+    did = Column(String(500), nullable=False, index=True)
+    domain = Column(String(255), nullable=False, index=True)
+    namespace = Column(String(255), nullable=False, index=True)
+    alias = Column(String(255), nullable=False, index=True)
+    
+    # Data
+    witness_proofs = Column(JSON, nullable=False)
+    
+    # MediaType
+    media_type = Column(String(255), nullable=False, default="application/json")
+    
+    # Composite indexes
+    __table_args__ = (
+        Index('idx_witness_namespace_alias', 'namespace', 'alias'),
+    )
+
+class WhoisVpRecord(Base):
+    """WHOIS presentations table."""
+
+    __tablename__ = "whois_presentations"
+    
+    # Primary key
+    scid = Column(String(255), primary_key=True, index=True)
+    
+    # DID information (indexed for querying)
+    did = Column(String(500), nullable=False, index=True)
+    domain = Column(String(255), nullable=False, index=True)
+    namespace = Column(String(255), nullable=False, index=True)
+    alias = Column(String(255), nullable=False, index=True)
+    
+    # Data
+    presentation = Column(JSON, nullable=False)
+    
+    # MediaType
+    media_type = Column(String(255), nullable=False, default='application/vp')
+    
+    # Composite indexes
+    __table_args__ = (
+        Index('idx_whois_namespace_alias', 'namespace', 'alias'),
+    )
 
 class AttestedResourceRecord(Base):
     """Attested resources table."""

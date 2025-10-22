@@ -17,7 +17,7 @@ from multiformats import multibase
 
 from app.models.policy import ActivePolicy
 from app.models.task import TaskInstance
-from app.models.resource import AttestedResource, ResourceMetadata
+from app.models.resource import ResourceMetadata
 from app.plugins import AskarStorage, AskarStorageKeys, DidWebVH
 from app.utilities import (
     timestamp,
@@ -362,7 +362,7 @@ class TaskManager:
                 metadata = ResourceMetadata(
                     resourceId=resource_id,
                     resourceType='anonCredsSchema',
-                    resourceName=f'LoadTestSchema{i}'
+                    resourceName='LoadTestSchema'
                 )
                 
                 # Create attested resource with mock proof

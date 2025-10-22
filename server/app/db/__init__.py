@@ -8,7 +8,7 @@ Example:
     
     storage = StorageManager()
     storage.provision()  # Initialize database
-    log_entry = storage.create_log_entry(...)
+    did_controller = storage.get_did_controller(namespace, identifier)
     
 For FastAPI dependencies:
     from app.plugins.storage import StorageManager
@@ -22,29 +22,22 @@ For FastAPI dependencies:
 
 from .base import Base
 from .models import (
-    LogEntry,
-    Resource,
+    DidControllerRecord,
+    AttestedResourceRecord,
     AdminBackgroundTask,
     ServerPolicy,
     KnownWitnessRegistry,
-    WitnessFile,
-    WhoisPresentation,
-    Task,
-    Policy,
-    Registry,
+    TestLogEntry,
+    TestResource,
 )
 
 __all__ = [
     "Base",
-    "LogEntry",
-    "Resource",
+    "DidControllerRecord",
+    "AttestedResourceRecord",
     "AdminBackgroundTask",
     "ServerPolicy",
     "KnownWitnessRegistry",
-    "WitnessFile",
-    "WhoisPresentation",
-    "Task",
-    "Policy",
-    "Registry",
+    "TestLogEntry",
+    "TestResource",
 ]
-

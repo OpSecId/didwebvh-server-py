@@ -9,22 +9,13 @@ from sqlalchemy.pool import StaticPool
 from config import settings
 from app.db.base import Base
 from app.db.models import (
-    LogFileRecord,
-    WitnessFileRecord,
-    WhoisVpRecord,
+    DidControllerRecord,
     AttestedResourceRecord,
     AdminBackgroundTask,
     ServerPolicy,
     KnownWitnessRegistry,
     TestLogEntry,
     TestResource,
-    LogEntry,
-    Resource,
-    WitnessFile,
-    WhoisPresentation,
-    Task,
-    Policy,
-    Registry,
 )
 from app.db.explorer_models import (
     ExplorerDIDRecord,
@@ -164,11 +155,65 @@ class StorageManager:
 
     # ========== Log Entry Operations ==========
 
+    # ========== DID Controller Operations ==========
+
+    def create_did_controller(self, scid: str, did: str, domain: str, namespace: str,
+                             alias: str, logs: List[Dict], parameters: Dict, document_state: Dict,
+                             witness_file: Optional[List[Dict]] = None, 
+                             whois_presentation: Optional[Dict] = None,
+                             deactivated: bool = False) -> DidControllerRecord:
+        """Create a new DID controller record with all associated data."""
+        with self.get_session() as session:
+            controller = DidControllerRecord(
+                scid=scid,
+                did=did,
+                domain=domain,
+                namespace=namespace,
+                alias=alias,
+                deactivated=deactivated,
+                logs=logs,
+                witness_file=witness_file,
+                whois_presentation=whois_presentation,
+                parameters=parameters,
+                document_state=document_state
+            )
+            session.add(controller)
+            session.commit()
+            session.refresh(controller)
+            return controller
+
+    def update_did_controller(self, scid: str, logs: Optional[List[Dict]] = None,
+                             witness_file: Optional[List[Dict]] = None,
+                             whois_presentation: Optional[Dict] = None,
+                             parameters: Optional[Dict] = None,
+                             document_state: Optional[Dict] = None,
+                             deactivated: Optional[bool] = None) -> Optional[DidControllerRecord]:
+        """Update an existing DID controller record."""
+        with self.get_session() as session:
+            controller = session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
+            if controller:
+                if logs is not None:
+                    controller.logs = logs
+                if witness_file is not None:
+                    controller.witness_file = witness_file
+                if whois_presentation is not None:
+                    controller.whois_presentation = whois_presentation
+                if parameters is not None:
+                    controller.parameters = parameters
+                if document_state is not None:
+                    controller.document_state = document_state
+                if deactivated is not None:
+                    controller.deactivated = deactivated
+                session.commit()
+                session.refresh(controller)
+            return controller
+
+
     def create_log_entry(self, scid: str, did: str, domain: str, namespace: str, 
-                        identifier: str, logs: List[Dict], deactivated: bool = False) -> LogEntry:
+                        identifier: str, logs: List[Dict], deactivated: bool = False) -> DidControllerRecord:
         """Create a new log entry."""
         with self.get_session() as session:
-            log_entry = LogEntry(
+            log_entry = DidControllerRecord(
                 scid=scid,
                 did=did,
                 domain=domain,
@@ -182,35 +227,35 @@ class StorageManager:
             session.refresh(log_entry)
             return log_entry
 
-    def get_log_entry(self, scid: str) -> Optional[LogEntry]:
+    def get_log_entry(self, scid: str) -> Optional[DidControllerRecord]:
         """Get a log entry by SCID."""
         with self.get_session() as session:
-            return session.query(LogEntry).filter(LogEntry.scid == scid).first()
+            return session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
 
-    def get_log_entries(self, filters: Optional[Dict[str, Any]] = None) -> List[LogEntry]:
+    def get_log_entries(self, filters: Optional[Dict[str, Any]] = None) -> List[DidControllerRecord]:
         """Get log entries with optional filters."""
         with self.get_session() as session:
-            query = session.query(LogEntry)
+            query = session.query(DidControllerRecord)
             
             if filters:
                 if 'did' in filters:
-                    query = query.filter(LogEntry.did == filters['did'])
+                    query = query.filter(DidControllerRecord.did == filters['did'])
                 if 'domain' in filters:
-                    query = query.filter(LogEntry.domain == filters['domain'])
+                    query = query.filter(DidControllerRecord.domain == filters['domain'])
                 if 'namespace' in filters:
-                    query = query.filter(LogEntry.namespace == filters['namespace'])
+                    query = query.filter(DidControllerRecord.namespace == filters['namespace'])
                 if 'identifier' in filters:
-                    query = query.filter(LogEntry.identifier == filters['identifier'])
+                    query = query.filter(DidControllerRecord.identifier == filters['identifier'])
                 if 'deactivated' in filters:
-                    query = query.filter(LogEntry.deactivated == filters['deactivated'])
+                    query = query.filter(DidControllerRecord.deactivated == filters['deactivated'])
             
             return query.all()
 
     def update_log_entry(self, scid: str, logs: List[Dict], 
-                        deactivated: Optional[bool] = None) -> Optional[LogEntry]:
+                        deactivated: Optional[bool] = None) -> Optional[DidControllerRecord]:
         """Update an existing log entry."""
         with self.get_session() as session:
-            log_entry = session.query(LogEntry).filter(LogEntry.scid == scid).first()
+            log_entry = session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
             if log_entry:
                 log_entry.logs = logs
                 if deactivated is not None:
@@ -222,21 +267,21 @@ class StorageManager:
     def delete_log_entry(self, scid: str) -> bool:
         """Delete a log entry."""
         with self.get_session() as session:
-            log_entry = session.query(LogEntry).filter(LogEntry.scid == scid).first()
+            log_entry = session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
             if log_entry:
                 session.delete(log_entry)
                 session.commit()
                 return True
             return False
 
-    # ========== Resource Operations ==========
+    # ========== AttestedResourceRecord Operations ==========
 
     def create_resource(self, resource_id: str, scid: str, did: str, 
                        resource_type: str, resource_name: str,
-                       content: Dict, metadata: Dict, proof: Optional[Dict] = None) -> Resource:
+                       content: Dict, metadata: Dict, proof: Optional[Dict] = None) -> AttestedResourceRecord:
         """Create a new resource."""
         with self.get_session() as session:
-            resource = Resource(
+            resource = AttestedResourceRecord(
                 resource_id=resource_id,
                 scid=scid,
                 did=did,
@@ -251,31 +296,31 @@ class StorageManager:
             session.refresh(resource)
             return resource
 
-    def get_resource(self, resource_id: str) -> Optional[Resource]:
+    def get_resource(self, resource_id: str) -> Optional[AttestedResourceRecord]:
         """Get a resource by ID."""
         with self.get_session() as session:
-            return session.query(Resource).filter(Resource.resource_id == resource_id).first()
+            return session.query(AttestedResourceRecord).filter(AttestedResourceRecord.resource_id == resource_id).first()
 
-    def get_resources(self, filters: Optional[Dict[str, Any]] = None) -> List[Resource]:
+    def get_resources(self, filters: Optional[Dict[str, Any]] = None) -> List[AttestedResourceRecord]:
         """Get resources with optional filters."""
         with self.get_session() as session:
-            query = session.query(Resource)
+            query = session.query(AttestedResourceRecord)
             
             if filters:
                 if 'scid' in filters:
-                    query = query.filter(Resource.scid == filters['scid'])
+                    query = query.filter(AttestedResourceRecord.scid == filters['scid'])
                 if 'did' in filters:
-                    query = query.filter(Resource.did == filters['did'])
+                    query = query.filter(AttestedResourceRecord.did == filters['did'])
                 if 'resource_type' in filters:
-                    query = query.filter(Resource.resource_type == filters['resource_type'])
+                    query = query.filter(AttestedResourceRecord.resource_type == filters['resource_type'])
             
             return query.all()
 
     def update_resource(self, resource_id: str, content: Optional[Dict] = None,
-                       metadata: Optional[Dict] = None, proof: Optional[Dict] = None) -> Optional[Resource]:
+                       metadata: Optional[Dict] = None, proof: Optional[Dict] = None) -> Optional[AttestedResourceRecord]:
         """Update an existing resource."""
         with self.get_session() as session:
-            resource = session.query(Resource).filter(Resource.resource_id == resource_id).first()
+            resource = session.query(AttestedResourceRecord).filter(AttestedResourceRecord.resource_id == resource_id).first()
             if resource:
                 if content is not None:
                     resource.content = content
@@ -290,7 +335,7 @@ class StorageManager:
     def delete_resource(self, resource_id: str) -> bool:
         """Delete a resource."""
         with self.get_session() as session:
-            resource = session.query(Resource).filter(Resource.resource_id == resource_id).first()
+            resource = session.query(AttestedResourceRecord).filter(AttestedResourceRecord.resource_id == resource_id).first()
             if resource:
                 session.delete(resource)
                 session.commit()
@@ -419,47 +464,74 @@ class StorageManager:
 
     # ========== Witness File Operations ==========
 
-    def create_or_update_witness_file(self, scid: str, witness_proofs: List[Dict]) -> WitnessFile:
+    def create_or_update_witness_file(self, scid: str, witness_proofs: List[Dict]) -> DidControllerRecord:
         """Create or update a witness file."""
         with self.get_session() as session:
-            witness_file = session.query(WitnessFile).filter(WitnessFile.scid == scid).first()
+            witness_file = session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
             
             if witness_file:
                 witness_file.witness_proofs = witness_proofs
             else:
-                witness_file = WitnessFile(scid=scid, witness_proofs=witness_proofs)
+                witness_file = DidControllerRecord(scid=scid, witness_proofs=witness_proofs)
                 session.add(witness_file)
             
             session.commit()
             session.refresh(witness_file)
             return witness_file
 
-    def get_witness_file(self, scid: str) -> Optional[WitnessFile]:
+    def get_witness_file(self, scid: str) -> Optional[DidControllerRecord]:
         """Get a witness file by SCID."""
         with self.get_session() as session:
-            return session.query(WitnessFile).filter(WitnessFile.scid == scid).first()
+            return session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
 
     # ========== WHOIS Presentation Operations ==========
 
-    def create_or_update_whois(self, scid: str, presentation: Dict) -> WhoisPresentation:
+    def create_or_update_whois(self, scid: str, presentation: Dict) -> DidControllerRecord:
         """Create or update a WHOIS presentation."""
         with self.get_session() as session:
-            whois = session.query(WhoisPresentation).filter(WhoisPresentation.scid == scid).first()
+            whois = session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
             
             if whois:
                 whois.presentation = presentation
             else:
-                whois = WhoisPresentation(scid=scid, presentation=presentation)
+                whois = DidControllerRecord(scid=scid, presentation=presentation)
                 session.add(whois)
             
             session.commit()
             session.refresh(whois)
             return whois
 
-    def get_whois(self, scid: str) -> Optional[WhoisPresentation]:
+    def get_whois(self, scid: str) -> Optional[DidControllerRecord]:
         """Get a WHOIS presentation by SCID."""
         with self.get_session() as session:
-            return session.query(WhoisPresentation).filter(WhoisPresentation.scid == scid).first()
+            return session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
+
+    # ========== Helper Methods (Query by Namespace and Identifier) ==========
+
+    def get_did_controller_by_alias(self, namespace: str, identifier: str) -> Optional[DidControllerRecord]:
+        """Get a log entry by namespace and identifier (alias)."""
+        with self.get_session() as session:
+            return session.query(DidControllerRecord).filter(
+                DidControllerRecord.namespace == namespace,
+                DidControllerRecord.alias == identifier
+            ).first()
+
+    def get_witness_file_by_identifier(self, namespace: str, identifier: str) -> Optional[DidControllerRecord]:
+        """Get a witness file by namespace and identifier (alias)."""
+        with self.get_session() as session:
+            return session.query(DidControllerRecord).filter(
+                DidControllerRecord.namespace == namespace,
+                DidControllerRecord.alias == identifier
+            ).first()
+
+    def get_whois_by_identifier(self, namespace: str, identifier: str) -> Optional[DidControllerRecord]:
+        """Get a WHOIS presentation by namespace and identifier (alias)."""
+        with self.get_session() as session:
+            return session.query(DidControllerRecord).filter(
+                DidControllerRecord.namespace == namespace,
+                DidControllerRecord.alias == identifier
+            ).first()
+
 
     # ========== Test Data Operations (for load testing) ==========
 
