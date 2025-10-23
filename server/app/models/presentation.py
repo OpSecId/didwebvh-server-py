@@ -53,3 +53,11 @@ class VerifiablePresentation(CustomBaseModel):
     )
 
     proof: Union[List[DataIntegrityProof], DataIntegrityProof] = Field()
+
+
+class EnvelopedVerifiablePresentation(CustomBaseModel):
+    """EnvelopedVerifiablePresentation model for VC-JOSE presentations."""
+    
+    context: List[str] = Field(alias="@context")
+    id: str = Field(..., description="Data URL containing the VP-JWT")
+    type: str = Field(..., description="Must be 'EnvelopedVerifiablePresentation'")

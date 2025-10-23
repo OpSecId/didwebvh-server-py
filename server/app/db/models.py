@@ -52,6 +52,69 @@ class DidControllerRecord(Base):
         Index('idx_controller_domain_deactivated', 'domain', 'deactivated'),
         Index('idx_controller_alias_deactivated', 'alias', 'deactivated'),
     )
+    
+    def __init__(self, logs: list, witness_file: list = None, whois_presentation: dict = None, **kwargs):
+        """
+        Initialize DidControllerRecord from logs and associated data.
+        All DID fields are derived from the document state in the logs.
+        
+        Args:
+            logs: List of log entries
+            witness_file: Optional witness file data
+            whois_presentation: Optional whois presentation data
+            **kwargs: Additional fields to override
+        """
+        from app.plugins import DidWebVH
+        
+        # Get document state from logs
+        webvh = DidWebVH()
+        state = webvh.get_document_state(logs)
+        
+        # Extract domain, namespace, alias from document_id
+        # document_id format: did:webvh:{scid}:domain:namespace:alias
+        did_parts = state.document_id.split(":")
+        domain = did_parts[3] if len(did_parts) > 3 else ""
+        namespace = did_parts[4] if len(did_parts) > 4 else ""
+        alias = did_parts[5] if len(did_parts) > 5 else ""
+        
+        # Extract parameters from state
+        params = state.params if hasattr(state, 'params') else (state.parameters if hasattr(state, 'parameters') else {})
+        
+        # Get document state - use state.document which is the actual DID document
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Try to get the document from state
+        if hasattr(state, 'document') and state.document:
+            doc_state = state.document if isinstance(state.document, dict) else (state.document.model_dump() if hasattr(state.document, 'model_dump') else {})
+        elif hasattr(state, 'portable') and state.portable:
+            doc_state = state.portable if isinstance(state.portable, dict) else {}
+        else:
+            doc_state = {}
+            logger.warning(f"Could not extract document_state for DID {state.document_id}")
+        
+        logger.info(f"Creating DID controller with document_state keys: {list(doc_state.keys()) if isinstance(doc_state, dict) else 'NOT A DICT'}")
+        
+        # Build the init data, only setting values not already in kwargs
+        init_data = {
+            "scid": state.scid,
+            "did": state.document_id,
+            "domain": domain,
+            "namespace": namespace,
+            "alias": alias,
+            "deactivated": state.deactivated,
+            "logs": logs,
+            "witness_file": witness_file or [],
+            "whois_presentation": whois_presentation or {},
+            "parameters": params,
+            "document_state": doc_state,
+        }
+        
+        # Merge with kwargs, giving precedence to kwargs
+        init_data.update(kwargs)
+        
+        # Call parent init
+        super().__init__(**init_data)
 
 
 class AttestedResourceRecord(Base):
@@ -84,6 +147,44 @@ class AttestedResourceRecord(Base):
         Index('idx_attested_scid_resource_type', 'scid', 'resource_type'),
         Index('idx_attested_did_resource_type', 'did', 'resource_type'),
     )
+    
+    def __init__(self, attested_resource: dict, **kwargs):
+        """
+        Initialize AttestedResourceRecord from an attested_resource dict.
+        All fields are derived from the attested_resource.
+        """
+        # Extract resource_id
+        resource_id = attested_resource.get("id")
+        if not resource_id:
+            raise ValueError("attested_resource must have an 'id' field")
+        
+        # Extract scid from resource_id (last part after /)
+        scid = resource_id.split("/")[-1] if "/" in resource_id else None
+        
+        # Extract metadata
+        resource_metadata = attested_resource.get("resourceMetadata", {})
+        resource_type = resource_metadata.get("type", "Unknown")
+        resource_name = resource_metadata.get("name", "")
+        
+        # Extract DID from controller or issuer
+        did = attested_resource.get("controller") or attested_resource.get("issuer")
+        if isinstance(did, dict):
+            did = did.get("id")
+        
+        # Extract media type
+        media_type = attested_resource.get("mediaType") or kwargs.get("media_type", "application/jsonld")
+        
+        # Call parent init with all fields
+        super().__init__(
+            resource_id=resource_id,
+            scid=scid,
+            resource_type=resource_type,
+            resource_name=resource_name,
+            did=did,
+            attested_resource=attested_resource,
+            media_type=media_type,
+            **kwargs
+        )
 
 
 class VerifiableCredentialRecord(Base):
@@ -113,6 +214,11 @@ class VerifiableCredentialRecord(Base):
     
     # Status
     revoked = Column(Boolean, default=False, index=True, nullable=False)
+    
+    # Verification (stored at creation time)
+    verified = Column(Boolean, default=False, nullable=False)
+    verification_method = Column(String(500), nullable=True)  # VM used for verification
+    verification_error = Column(Text, nullable=True)  # Error message if verification failed
     
     # Metadata
     created = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

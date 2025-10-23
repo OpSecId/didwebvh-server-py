@@ -2,6 +2,9 @@
 app.db
 tmp/
 
+# Keep Demo Out Until DB feature merged
+demo/*
+
 # Linting
 .ruff_cache/
 

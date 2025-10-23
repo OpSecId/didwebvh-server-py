@@ -72,6 +72,11 @@ class ExplorerResourceRecord(Base):
     resource_type = Column(String(255), index=True)
     did = Column(String(512), index=True)
     
+    # DID components (parsed from did)
+    domain = Column(String(255), index=True)
+    namespace = Column(String(255), index=True)
+    alias = Column(String(255), index=True)
+    
     # Metadata
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -81,12 +86,56 @@ class ExplorerResourceRecord(Base):
         # Common filters
         Index('idx_explorer_resource_scid_type', 'scid', 'resource_type'),
         Index('idx_explorer_resource_did_type', 'did', 'resource_type'),
+        Index('idx_explorer_resource_namespace_type', 'namespace', 'resource_type'),
         # Single column indexes
         Index('idx_explorer_resource_scid', 'scid'),
         Index('idx_explorer_resource_type', 'resource_type'),
         Index('idx_explorer_resource_id', 'resource_id'),
         Index('idx_explorer_resource_did', 'did'),
+        Index('idx_explorer_resource_domain', 'domain'),
+        Index('idx_explorer_resource_namespace', 'namespace'),
+        Index('idx_explorer_resource_alias', 'alias'),
     )
+    
+    @staticmethod
+    def parse_did_components(did: str):
+        """
+        Parse DID to extract domain, namespace, and alias.
+        
+        Examples:
+            did:webvh:example.com:alice -> domain="example.com", namespace="", alias="alice"
+            did:webvh:example.com:ns1:bob -> domain="example.com", namespace="ns1", alias="bob"
+            did:web:example.com:alice -> domain="example.com", namespace="", alias="alice"
+        
+        Returns:
+            dict with keys: domain, namespace, alias
+        """
+        if not did:
+            return {"domain": None, "namespace": None, "alias": None}
+        
+        # Remove did:webvh: or did:web: prefix
+        if did.startswith("did:webvh:"):
+            path = did[10:]  # Remove "did:webvh:"
+        elif did.startswith("did:web:"):
+            path = did[8:]   # Remove "did:web:"
+        else:
+            return {"domain": None, "namespace": None, "alias": None}
+        
+        # Split by colon
+        parts = path.split(":")
+        
+        if len(parts) == 2:
+            # did:webvh:domain:alias
+            return {"domain": parts[0], "namespace": None, "alias": parts[1]}
+        elif len(parts) == 3:
+            # did:webvh:domain:namespace:alias
+            return {"domain": parts[0], "namespace": parts[1], "alias": parts[2]}
+        elif len(parts) == 1:
+            # Just domain
+            return {"domain": parts[0], "namespace": None, "alias": None}
+        else:
+            # More parts - take first as domain, last as alias, middle as namespace
+            return {"domain": parts[0], "namespace": ":".join(parts[1:-1]) if len(parts) > 2 else None, "alias": parts[-1]}
 
 
 class AskarGenericRecord(Base):

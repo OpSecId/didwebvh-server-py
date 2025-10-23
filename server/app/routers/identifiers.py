@@ -1,11 +1,14 @@
 """Identifier endpoints for DIDWeb and DIDWebVH."""
 
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException, Response, Depends, Depends
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 from app.models.web_schemas import NewLogEntry, WhoisUpdate
 from app.plugins import AskarStorage, AskarVerifier, DidWebVH, PolicyError
@@ -123,7 +126,8 @@ async def new_log_entry(
             raise HTTPException(status_code=400, detail=f"Policy infraction: {err}")
 
         # Create DID controller in database (extracts all data from logs)
-        storage.create_did_controller(log_entries, witness_file)
+        controller = storage.create_did_controller(log_entries, witness_file)
+        logger.info(f"Created DID controller: {controller.scid} ({controller.namespace}/{controller.alias})")
 
         return JSONResponse(status_code=201, content=log_entries[-1])
 
@@ -152,7 +156,7 @@ async def new_log_entry(
     return JSONResponse(status_code=200, content=log_entries[-1])
 
 
-@router.get("/{namespace}/{identifier}/did.json", include_in_schema=False)
+@router.get("/{namespace}/{identifier}/did.json")
 async def read_did(did_controller: DidControllerRecord = Depends(get_did_controller_dependency)):
     """See https://identity.foundation/didwebvh/next/#publishing-a-parallel-didweb-did."""
     document_state = webvh.get_document_state(did_controller.logs)
@@ -160,14 +164,14 @@ async def read_did(did_controller: DidControllerRecord = Depends(get_did_control
     return Response(did_document, media_type="application/did+ld+json")
 
 
-@router.get("/{namespace}/{identifier}/did.jsonl", include_in_schema=False)
+@router.get("/{namespace}/{identifier}/did.jsonl")
 async def read_did_log(did_controller: DidControllerRecord = Depends(get_did_controller_dependency)):
     """See https://identity.foundation/didwebvh/next/#the-did-log-file."""
     log_entries = "\n".join([json.dumps(log_entry) for log_entry in did_controller.logs]) + "\n"
     return Response(log_entries, media_type="text/jsonl")
 
 
-@router.get("/{namespace}/{identifier}/did-witness.json", include_in_schema=False)
+@router.get("/{namespace}/{identifier}/did-witness.json")
 async def read_witness_file(did_controller: DidControllerRecord = Depends(get_did_controller_dependency)):
     """See https://identity.foundation/didwebvh/next/#the-witness-proofs-file."""
     if not did_controller.witness_file:
@@ -176,7 +180,7 @@ async def read_witness_file(did_controller: DidControllerRecord = Depends(get_di
     return JSONResponse(status_code=200, content=did_controller.witness_file)
 
 
-@router.get("/{namespace}/{identifier}/whois.vp", include_in_schema=False)
+@router.get("/{namespace}/{identifier}/whois.vp")
 async def read_whois(did_controller: DidControllerRecord = Depends(get_did_controller_dependency)):
     """See https://identity.foundation/didwebvh/v1.0/#whois-linkedvp-service."""
     if not did_controller.whois_presentation:
@@ -190,11 +194,36 @@ async def update_whois(
     request_body: WhoisUpdate,
     did_controller: DidControllerRecord = Depends(get_did_controller_dependency)
 ):
-    """See https://didwebvh.info/latest/whois/."""
+    """
+    Update WHOIS with a Verifiable Presentation.
+    
+    Supports both:
+    - VerifiablePresentation (with Data Integrity proof)
+    - EnvelopedVerifiablePresentation (VC-JOSE VP-JWT)
+    
+    See https://didwebvh.info/latest/whois/
+    """
     doc_state = webvh.get_document_state(did_controller.logs)
-
     whois_vp = request_body.model_dump().get("verifiablePresentation")
-
+    
+    # Check if this is an EnvelopedVerifiablePresentation
+    if whois_vp.get("type") == "EnvelopedVerifiablePresentation":
+        # EnvelopedVP - the presentation is in a JWT data URL
+        logger.info(f"Received EnvelopedVerifiablePresentation for {did_controller.did}")
+        
+        # TODO: Verify the VP-JWT signature
+        # For now, just store it
+        logger.warning(f"EnvelopedVP signature verification not yet implemented")
+        
+        # Store the EnvelopedVP
+        storage.update_did_controller(
+            scid=did_controller.scid,
+            whois_presentation=whois_vp
+        )
+        
+        return JSONResponse(status_code=200, content={"Message": "Whois EnvelopedVP updated."})
+    
+    # Standard VerifiablePresentation with Data Integrity proof
     whois_vp_copy = whois_vp.copy()
     proof = first_proof(whois_vp_copy.pop("proof"))
 

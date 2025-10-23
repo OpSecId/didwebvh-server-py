@@ -139,46 +139,88 @@ class TaskManager:
         except Exception as e:
             await self.abandon_task(str(e))
 
-    async def sync_explorer_records(self, force=False):
-        """Sync explorer records."""
+    async def sync_records(self, force=False):
+        """Sync records from Askar to SQL database using DidControllerRecord and AttestedResourceRecord."""
 
         await self.start_task(TaskType.SyncRecords)
 
         try:
+            from app.db.models import DidControllerRecord, AttestedResourceRecord
+            from app.plugins.storage import StorageManager
+            
+            sql_storage = StorageManager()
+            
+            # Sync attested resource records
             entries = await askar.get_category_entries("resource")
             for idx, entry in enumerate(entries):
-                await self.update_task_progress({"resourceRecords": f"{idx + 1}/{len(entries)}"})
+                await self.update_task_progress({"attestedResources": f"{idx + 1}/{len(entries)}"})
 
-                if not force and await askar.fetch("resourceRecord", entry.name):
+                attested_resource = entry.value_json
+                
+                if not (resource_id := attested_resource.get("id")):
+                    logger.warning(f"Skipping resource without ID: {entry.name}")
                     continue
+                
+                # Check if record already exists in SQL
+                with sql_storage.get_session() as session:
+                    resource_id = attested_resource.get("id")
+                    existing = session.query(AttestedResourceRecord).filter(
+                        AttestedResourceRecord.resource_id == resource_id
+                    ).first()
+                    
+                    if existing and not force:
+                        # Skip if exists and not forcing
+                        continue
+                    
+                    if existing and force:
+                        # Delete existing record when forcing
+                        session.delete(existing)
+                        logger.debug(f"Deleted existing attested resource: {resource_id}")
+                    
+                    # Create new record (fields are derived in the model from attested_resource)
+                    new_record = AttestedResourceRecord(attested_resource=attested_resource)
+                    session.add(new_record)
+                    session.commit()
+                    logger.debug(f"Created attested resource: {resource_id}")
 
-                resource_record, tags = sync_resource(entry.value_json)
-                await askar.update("resource", entry.name, entry.value_json, tags)
-                await askar.store_or_update("resourceRecord", entry.name, resource_record, tags)
-
+            # Sync DID controller records
             entries = await askar.get_category_entries("logEntries")
             for idx, entry in enumerate(entries):
-                await self.update_task_progress({"didRecords": f"{idx + 1}/{len(entries)}"})
-
-                if not force and await askar.fetch("didRecord", entry.name):
-                    continue
+                await self.update_task_progress({"didControllers": f"{idx + 1}/{len(entries)}"})
 
                 logs = entry.value_json
+                
+                # Get witness file and whois presentation
+                witness_file = await askar.fetch("witnessFile", entry.name) or []
+                whois_presentation = await askar.fetch("whois", entry.name) or {}
+                
+                # Get document state to find scid for existence check
                 state = webvh.get_document_state(logs)
-                did_record, tags = sync_did_info(
-                    state=state,
-                    logs=logs,
-                    did_resources=[
-                        resource.value_json
-                        for resource in await askar.get_category_entries(
-                            "resource", {"scid": state.scid}
-                        )
-                    ],
-                    witness_file=(await askar.fetch("witnessFile", entry.name) or []),
-                    whois_presentation=(await askar.fetch("whois", entry.name) or {}),
-                )
-                await askar.update("logEntries", entry.name, entry.value_json, tags=tags)
-                await askar.store_or_update("didRecord", entry.name, did_record, tags=tags)
+                
+                # Check if record already exists in SQL
+                with sql_storage.get_session() as session:
+                    existing = session.query(DidControllerRecord).filter(
+                        DidControllerRecord.scid == state.scid
+                    ).first()
+                    
+                    if existing and not force:
+                        # Skip if exists and not forcing
+                        continue
+                    
+                    if existing and force:
+                        # Delete existing record when forcing
+                        session.delete(existing)
+                        logger.debug(f"Deleted existing DID controller: {state.scid}")
+                    
+                    # Create new record (fields are derived in the model from logs)
+                    new_record = DidControllerRecord(
+                        logs=logs,
+                        witness_file=witness_file,
+                        whois_presentation=whois_presentation,
+                    )
+                    session.add(new_record)
+                    session.commit()
+                    logger.debug(f"Created DID controller: {state.scid}")
 
             await self.finish_task()
 

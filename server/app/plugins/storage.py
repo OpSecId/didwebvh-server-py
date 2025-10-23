@@ -173,37 +173,25 @@ class StorageManager:
         """
         from app.plugins import DidWebVH
         
-        with self.get_session() as session:
-            # Extract DID information from logs
-            webvh = DidWebVH()
-            state = webvh.get_document_state(logs)
-            
-            # Parse DID components
-            did = state.document_id
-            _, _, scid, domain, namespace, alias = did.split(":")
-            
-            # Extract deactivated status from parameters
-            params = state.params if hasattr(state, 'params') else state.parameters
-            deactivated = params.get("deactivated", False) if params else False
-            
-            # Create controller
+        session = self.get_session()
+        try:
+            # Create controller - let the model's __init__ derive all fields from logs
             controller = DidControllerRecord(
-                scid=scid,
-                did=did,
-                domain=domain,
-                namespace=namespace,
-                alias=alias,
-                deactivated=deactivated,
                 logs=logs,
                 witness_file=witness_file,
-                whois_presentation=whois_presentation,
-                parameters=params,
-                document_state=state.document if isinstance(state.document, dict) else state.document.model_dump() if hasattr(state.document, 'model_dump') else dict(state.document)
+                whois_presentation=whois_presentation
             )
             session.add(controller)
             session.commit()
             session.refresh(controller)
+            logger.info(f"Successfully committed DID controller {controller.scid} to database")
             return controller
+        except Exception as e:
+            logger.error(f"Error creating DID controller: {e}", exc_info=True)
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     def update_did_controller(self, scid: str, logs: Optional[List[Dict]] = None,
                              witness_file: Optional[List[Dict]] = None,
@@ -473,58 +461,138 @@ class StorageManager:
 
     # ========== Credential Operations ==========
 
-    def create_credential(self, scid: str, verifiable_credential: Dict) -> VerifiableCredentialRecord:
+    def create_credential(self, scid: str, verifiable_credential: Dict, custom_id: str = None, 
+                         verified: bool = False, verification_method: str = None, verification_error: str = None) -> VerifiableCredentialRecord:
         """Create a new verifiable credential - extracts metadata from verifiable_credential.
         
         Args:
             scid: The SCID from the parent DidControllerRecord (FK relationship)
-            verifiable_credential: The full verifiable credential object
+            verifiable_credential: The full verifiable credential object (may be enveloped)
+            custom_id: Optional custom ID to use instead of the credential's id (for lookups)
             
         Returns:
             VerifiableCredentialRecord: The created record
         """
         from dateutil import parser as date_parser
+        import json
+        import base64
         
         with self.get_session() as session:
-            # Extract credential ID
-            credential_id = verifiable_credential.get("id")
+            # Use custom_id if provided, otherwise use credential's id
+            credential_id = custom_id if custom_id else verifiable_credential.get("id")
             if not credential_id:
                 raise ValueError("Credential must have an 'id' field")
             
-            # Extract issuer DID
-            issuer = verifiable_credential.get("issuer")
-            if isinstance(issuer, dict):
-                issuer_did = issuer.get("id")
-            else:
-                issuer_did = issuer
+            # Check if this is an EnvelopedVerifiableCredential
+            credential_type_list = verifiable_credential.get("type", [])
+            if isinstance(credential_type_list, str):
+                credential_type_list = [credential_type_list]
             
-            # Extract credential type
-            credential_type = verifiable_credential.get("type", [])
-            if isinstance(credential_type, str):
-                credential_type = [credential_type]
+            is_enveloped = "EnvelopedVerifiableCredential" in credential_type_list
             
-            # Extract subject ID if present
-            subject = verifiable_credential.get("credentialSubject", {})
-            if isinstance(subject, list):
-                subject_id = subject[0].get("id") if subject and len(subject) > 0 else None
-            elif isinstance(subject, dict):
-                subject_id = subject.get("id")
-            else:
-                subject_id = None
-            
-            # Parse validity dates if present
-            valid_from = None
-            valid_until = None
-            if verifiable_credential.get("validFrom"):
+            # Decode enveloped credentials to extract metadata
+            if is_enveloped:
                 try:
-                    valid_from = date_parser.parse(verifiable_credential["validFrom"])
-                except Exception:
-                    pass
-            if verifiable_credential.get("validUntil"):
-                try:
-                    valid_until = date_parser.parse(verifiable_credential["validUntil"])
-                except Exception:
-                    pass
+                    # Extract JWT from data URL
+                    data_url = verifiable_credential.get("id", "")
+                    if data_url.startswith("data:"):
+                        jwt_token = data_url.split(",", 1)[1]
+                        parts = jwt_token.split(".")
+                        
+                        if len(parts) == 3:
+                            # Decode JWT payload (the actual credential)
+                            decoded_vc = json.loads(base64.urlsafe_b64decode(parts[1] + "=="))
+                            
+                            # Extract issuer from decoded credential
+                            issuer = decoded_vc.get("issuer")
+                            if isinstance(issuer, dict):
+                                issuer_did = issuer.get("id")
+                            else:
+                                issuer_did = issuer
+                            
+                            # Extract credential type from decoded credential
+                            credential_type = decoded_vc.get("type", [])
+                            if isinstance(credential_type, str):
+                                credential_type = [credential_type]
+                            
+                            # Extract subject ID from decoded credential
+                            subject = decoded_vc.get("credentialSubject", {})
+                            if isinstance(subject, list):
+                                subject_id = subject[0].get("id") if subject and len(subject) > 0 else None
+                            elif isinstance(subject, dict):
+                                subject_id = subject.get("id")
+                            else:
+                                subject_id = None
+                            
+                            # Parse validity dates from decoded credential
+                            valid_from = None
+                            valid_until = None
+                            if decoded_vc.get("validFrom"):
+                                try:
+                                    valid_from = date_parser.parse(decoded_vc["validFrom"])
+                                except Exception:
+                                    pass
+                            if decoded_vc.get("validUntil"):
+                                try:
+                                    valid_until = date_parser.parse(decoded_vc["validUntil"])
+                                except Exception:
+                                    pass
+                        else:
+                            # Invalid JWT format, use defaults
+                            issuer_did = None
+                            credential_type = ["EnvelopedVerifiableCredential"]
+                            subject_id = None
+                            valid_from = None
+                            valid_until = None
+                    else:
+                        # Not a data URL, use defaults
+                        issuer_did = None
+                        credential_type = ["EnvelopedVerifiableCredential"]
+                        subject_id = None
+                        valid_from = None
+                        valid_until = None
+                except Exception as e:
+                    # Decoding failed, use defaults
+                    issuer_did = None
+                    credential_type = ["EnvelopedVerifiableCredential"]
+                    subject_id = None
+                    valid_from = None
+                    valid_until = None
+            else:
+                # Extract issuer DID from plain credential
+                issuer = verifiable_credential.get("issuer")
+                if isinstance(issuer, dict):
+                    issuer_did = issuer.get("id")
+                else:
+                    issuer_did = issuer
+                
+                # Extract credential type
+                credential_type = verifiable_credential.get("type", [])
+                if isinstance(credential_type, str):
+                    credential_type = [credential_type]
+                
+                # Extract subject ID if present
+                subject = verifiable_credential.get("credentialSubject", {})
+                if isinstance(subject, list):
+                    subject_id = subject[0].get("id") if subject and len(subject) > 0 else None
+                elif isinstance(subject, dict):
+                    subject_id = subject.get("id")
+                else:
+                    subject_id = None
+                
+                # Parse validity dates if present
+                valid_from = None
+                valid_until = None
+                if verifiable_credential.get("validFrom"):
+                    try:
+                        valid_from = date_parser.parse(verifiable_credential["validFrom"])
+                    except Exception:
+                        pass
+                if verifiable_credential.get("validUntil"):
+                    try:
+                        valid_until = date_parser.parse(verifiable_credential["validUntil"])
+                    except Exception:
+                        pass
             
             credential = VerifiableCredentialRecord(
                 credential_id=credential_id,
@@ -535,7 +603,10 @@ class StorageManager:
                 verifiable_credential=verifiable_credential,
                 valid_from=valid_from,
                 valid_until=valid_until,
-                revoked=False
+                revoked=False,
+                verified=verified,
+                verification_method=verification_method,
+                verification_error=verification_error
             )
             session.add(credential)
             session.commit()
@@ -564,6 +635,10 @@ class StorageManager:
                 )
             
             if filters:
+                if 'credential_id' in filters:
+                    query = query.filter(VerifiableCredentialRecord.credential_id == filters['credential_id'])
+                if 'issuer_scid' in filters:
+                    query = query.filter(VerifiableCredentialRecord.scid == filters['issuer_scid'])
                 if 'scid' in filters:
                     query = query.filter(VerifiableCredentialRecord.scid == filters['scid'])
                 if 'issuer_did' in filters:
@@ -596,6 +671,10 @@ class StorageManager:
                 )
             
             if filters:
+                if 'credential_id' in filters:
+                    query = query.filter(VerifiableCredentialRecord.credential_id == filters['credential_id'])
+                if 'issuer_scid' in filters:
+                    query = query.filter(VerifiableCredentialRecord.scid == filters['issuer_scid'])
                 if 'scid' in filters:
                     query = query.filter(VerifiableCredentialRecord.scid == filters['scid'])
                 if 'issuer_did' in filters:
@@ -827,6 +906,13 @@ class StorageManager:
             return session.query(DidControllerRecord).filter(DidControllerRecord.scid == scid).first()
 
     # ========== Helper Methods (Query by Namespace and Identifier) ==========
+
+    def get_did_controller_by_scid(self, scid: str) -> Optional[DidControllerRecord]:
+        """Get a DID controller by SCID."""
+        with self.get_session() as session:
+            return session.query(DidControllerRecord).filter(
+                DidControllerRecord.scid == scid
+            ).first()
 
     def get_did_controller_by_alias(self, namespace: str, identifier: str) -> Optional[DidControllerRecord]:
         """Get a log entry by namespace and identifier (alias)."""

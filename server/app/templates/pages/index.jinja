@@ -48,11 +48,11 @@
         <div class="container-xl">
             {% if branding.demo_anoncreds_url %}
             <!-- Demo Banner -->
-            <div class="card mb-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <div class="card mb-4" style="background: linear-gradient(135deg, {{ branding.primary_color }} 0%, {{ branding.accent_color }} 100%);">
                 <div class="card-body py-4">
                     <div class="row align-items-center">
                         <div class="col-auto">
-                            <div class="avatar avatar-lg rounded-circle bg-white" style="color: #667eea;">
+                            <div class="avatar avatar-lg rounded-circle bg-white" style="color: {{ branding.primary_color }};">
                                 <i class="ti ti-certificate" style="font-size: 1.75rem;"></i>
                             </div>
                         </div>
@@ -106,18 +106,18 @@
                         <div class="card-body p-4">
                             <div class="row align-items-center">
                                 <div class="col-auto">
-                                    <span class="avatar avatar-xl rounded" style="background: rgba(165, 94, 234, 0.1);">
-                                        <i class="ti ti-id-badge-2" style="font-size: 2rem; color: #a55eea;"></i>
+                                    <span class="avatar avatar-xl rounded" style="background-color: var(--brand-accent-light);">
+                                        <i class="ti ti-id-badge-2" style="font-size: 2rem; color: var(--brand-accent);"></i>
                                     </span>
                                 </div>
                                 <div class="col">
-                                    <h2 class="card-title mb-1" style="color: #a55eea;">Verifiable Credentials</h2>
+                                    <h2 class="card-title mb-1" style="color: var(--brand-accent);">Verifiable Credentials</h2>
                                     <p class="text-secondary mb-0">
                                         Browse published credentials and their status
                                     </p>
                                 </div>
                                 <div class="col-auto">
-                                    <i class="ti ti-chevron-right" style="font-size: 2rem; color: #a55eea;"></i>
+                                    <i class="ti ti-chevron-right" style="font-size: 2rem; color: var(--brand-accent);"></i>
                                 </div>
                             </div>
                         </div>

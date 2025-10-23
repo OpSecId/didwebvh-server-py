@@ -7,7 +7,7 @@ import uvicorn
 
 from dotenv import load_dotenv
 
-from app.plugins import AskarStorage
+# from app.plugins import AskarStorage
 from app.plugins.storage import StorageManager
 from app.tasks import TaskManager
 
@@ -21,12 +21,13 @@ APP_WORKERS = int(os.getenv("APP_WORKERS", "4"))
 async def startup_tasks():
     """Run startup tasks before server starts."""
     # Provision databases (synchronously - must complete before server starts)
+    from app.plugins import AskarStorage
     await AskarStorage().provision()
     await StorageManager().provision(recreate=False)
     
     # Run startup tasks
     await TaskManager(str(uuid.uuid4())).set_policies()
-    # await TaskManager(str(uuid.uuid4())).sync_explorer_records()
+    # await TaskManager(str(uuid.uuid4())).sync_records()
 
 
 if __name__ == "__main__":
@@ -36,4 +37,4 @@ if __name__ == "__main__":
     print("Startup tasks completed. Starting server...")
     
     # Start server
-    uvicorn.run("app:app", host="0.0.0.0", port=APP_PORT, workers=APP_WORKERS, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=APP_PORT, reload=False)

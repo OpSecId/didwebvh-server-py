@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
@@ -18,6 +19,13 @@ templates = Jinja2Templates(directory="app/templates")
 # Add generate_avatar function to Jinja environment
 from app.avatar_generator import generate_avatar
 templates.env.globals['generate_avatar'] = generate_avatar
+
+# Add regex_replace filter to Jinja environment
+def regex_replace(s, pattern, replacement):
+    """Regex replace filter for Jinja2."""
+    return re.sub(pattern, replacement, s)
+
+templates.env.filters['regex_replace'] = regex_replace
 
 class ServerModes:
     TESTING='testing'

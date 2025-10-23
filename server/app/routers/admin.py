@@ -123,7 +123,7 @@ async def sync_storage(
     if task_type == TaskType.SetPolicy:
         tasks.add_task(TaskManager(task_id).set_policies, force)
     elif task_type == TaskType.SyncRecords:
-        tasks.add_task(TaskManager(task_id).sync_explorer_records, force)
+        tasks.add_task(TaskManager(task_id).sync_records, force)
     elif task_type == TaskType.LoadTest:
         tasks.add_task(TaskManager(task_id).load_test, num_test_sets)
     elif task_type == TaskType.MigrateAskarToPostgres:
