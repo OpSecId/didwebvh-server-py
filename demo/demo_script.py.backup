@@ -1,0 +1,972 @@
+#!/usr/bin/env python3
+"""
+Minimalistic UNTP demo script for DID WebVH server.
+
+Flow:
+1. Create 3 DIDs: Chief Permitting Officer (CPO), Registrar of Corporations (ROC), Tek Mines
+2. CPO issues Mines Act Permit (UNTP DCC) to Tek about their mine
+3. ROC issues BC Registration (UNTP DIA) to Tek
+4. Tek adds DIA to their whois.vp
+5. Tek issues Product Passport for Copper (UNTP DPP) with conformity evidence linking to Mines Act Permit
+"""
+
+import asyncio
+import logging
+import httpx
+import argparse
+from pathlib import Path
+from datetime import datetime
+import json
+
+from did_webvh.askar import AskarSigningKey
+from did_webvh.provision import auto_provision_did
+from did_webvh.core.proof import di_jcs_sign
+import base64
+from sqids import Sqids
+import time
+import random
+
+# Initialize Sqids for generating short IDs
+sqids = Sqids()
+
+# Import UNTP Pydantic models
+from untp_models import (
+    DigitalConformityCredential,
+    DigitalIdentityAnchor,
+    CredentialIssuer,
+    RegisteredIdentity,
+    ConformityAttestation,
+    IdentifierScheme,
+    Identifier,
+    Organization,
+    Endorsement,
+    Regulation,
+    FacilityVerification,
+    ProductVerification,
+    BitstringStatusListCredential,
+    BitstringStatusListCredentialSubject,
+    create_iso8601_timestamp,
+)
+import jwt
+import gzip
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
+
+
+def askar_key_to_jwk(askar_key: AskarSigningKey) -> dict:
+    """
+    Convert an Askar signing key to JWK format for VC-JOSE enveloping.
+    
+    For Ed25519 keys, creates an OKP (Octet Key Pair) JWK.
+    Reference: https://www.rfc-editor.org/rfc/rfc8037
+    """
+    # Get the public key bytes (32 bytes for Ed25519)
+    public_key_bytes = askar_key.public_key_bytes
+    
+    # For Ed25519, create an OKP JWK (RFC 8037)
+    # The 'x' parameter is the base64url-encoded public key
+    jwk = {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": base64.urlsafe_b64encode(public_key_bytes).decode('utf-8').rstrip('=')
+    }
+    
+    return jwk
+
+
+def create_verification_method_with_jwk(did: str, key: AskarSigningKey, vm_id: str = "#key-jwk-1") -> dict:
+    """
+    Create a verification method with publicKeyJwk for VC-JOSE support.
+    """
+    jwk = askar_key_to_jwk(key)
+    
+    return {
+        "id": f"{did}{vm_id}",
+        "type": "JsonWebKey2020",
+        "controller": did,
+        "publicKeyJwk": jwk
+    }
+
+
+def did_webvh_to_web(did_webvh: str, server_domain: str = None) -> str:
+    """
+    Convert a did:webvh DID to its did:web equivalent.
+    
+    did:webvh:{scid}:domain:path1:path2 -> did:web:domain:path1:path2
+    
+    Args:
+        did_webvh: The did:webvh DID to convert
+        server_domain: Optional domain override (for local testing with localhost)
+    
+    Returns:
+        The equivalent did:web DID
+    """
+    if not did_webvh.startswith("did:webvh:"):
+        return did_webvh
+    
+    # Split the DID: did:webvh:{scid}:domain:path1:path2:...
+    parts = did_webvh.split(":")
+    if len(parts) < 4:
+        return did_webvh  # Invalid format, return as-is
+    
+    # Skip the scid (parts[2]) and reconstruct as did:web
+    # did:web:domain:path1:path2:...
+    web_parts = ["did", "web"] + parts[3:]  # Skip "did", "webvh", and scid
+    
+    # If server_domain provided (for local testing), replace the domain
+    if server_domain and len(web_parts) > 2:
+        web_parts[2] = server_domain.replace(":", "%3A")  # URL-encode port if present
+    
+    return ":".join(web_parts)
+
+
+def create_empty_bitstring(size: int = 16 * 1024 * 8) -> str:
+    """
+    Create an empty bitstring for status list (all bits set to 0).
+    
+    Default size: 16KB (131,072 bits) - can track 131k credentials
+    Returns: GZIP-compressed, base64url-encoded bitstring
+    """
+    # Create bitstring (all zeros)
+    bitstring_bytes = bytes(size // 8)
+    
+    # GZIP compress
+    compressed = gzip.compress(bitstring_bytes)
+    
+    # Base64url encode
+    encoded = base64.urlsafe_b64encode(compressed).decode('utf-8').rstrip('=')
+    
+    return encoded
+
+
+def create_vc_jose_envelope(credential: dict, signing_key: AskarSigningKey, issuer_did: str, vm_id: str = "#key-jwk-1") -> dict:
+    """
+    Create a VC-JOSE (JWT) envelope for a verifiable credential.
+    
+    In VC-JOSE, the entire credential becomes the JWT payload.
+    This is different from VC-JWT where the credential is in a "vc" claim.
+    
+    Returns an EnvelopedVerifiableCredential object with the JWT.
+    Reference: https://www.w3.org/TR/vc-jose-cose/
+    """
+    # JWT Header
+    headers = {
+        "typ": "vc+jwt",  # Media type for VC-JOSE
+        "kid": f"{issuer_did}{vm_id}",  # Key ID (verification method)
+        "alg": "EdDSA"  # Algorithm for Ed25519
+    }
+    
+    # JWT Payload is the entire credential (VC-JOSE format)
+    # The credential itself becomes the payload, no wrapping
+    payload = credential
+    
+    # Create JWT manually using Askar signing
+    from json import dumps
+    header_b64 = base64.urlsafe_b64encode(dumps(headers, separators=(',', ':')).encode()).decode().rstrip('=')
+    payload_b64 = base64.urlsafe_b64encode(dumps(payload, separators=(',', ':')).encode()).decode().rstrip('=')
+    
+    # Sign with Askar key
+    message = f"{header_b64}.{payload_b64}".encode()
+    signature = signing_key.sign_message(message)
+    signature_b64 = base64.urlsafe_b64encode(signature).decode().rstrip('=')
+    
+    jwt_token = f"{header_b64}.{payload_b64}.{signature_b64}"
+    
+    # Wrap in EnvelopedVerifiableCredential
+    # The id should be a data URL containing the JWT
+    enveloped_vc = {
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "id": f"data:application/vc+jwt,{jwt_token}",
+        "type": "EnvelopedVerifiableCredential"
+    }
+    
+    return enveloped_vc
+
+# Generate shared namespace with random identifier
+SHARED_NAMESPACE = f"pilot-{random.randint(100, 999)}"
+
+# Demo actors
+ACTORS = [
+    {"name": "Chief Permitting Officer"},
+    {"name": "Registrar of Corporations"},
+    {"name": "Tek Mines"},
+]
+
+# Generate namespace and aliases from names
+for actor in ACTORS:
+    actor["namespace"] = SHARED_NAMESPACE
+    actor["alias"] = actor["name"].lower().replace(" ", "-")
+
+
+async def create_did(client: httpx.AsyncClient, server_url: str, actor: dict, output_dir: Path):
+    """Create a DID via API with publicKeyJwk for VC-JOSE enveloping."""
+    name = actor["name"]
+    namespace = actor["namespace"]
+    alias = actor["alias"]
+    
+    logger.info(f"▸ Creating DID: {name}")
+    
+    # Build domain path - use example.com for local generation
+    # The server will manage the actual domain mapping
+    from urllib.parse import urlparse
+    parsed_url = urlparse(server_url)
+    domain_path = f"example.com/{namespace}/{alias}"
+    
+    # Create witness key first (needed for DID parameters)
+    witness_key = AskarSigningKey.generate("ed25519")
+    witness_did_key = f"did:key:{witness_key.multikey}"  # Format as did:key
+    
+    # Generate DID locally with witness threshold of 1 and watcher
+    (doc_dir, state, genesis_key) = await auto_provision_did(
+        domain_path,
+        key_alg="ed25519",
+        pass_key="demo",
+        prerotation=True,
+        target_dir=str(output_dir),
+        extra_params={
+            "witness": {
+                "threshold": 1,
+                "witnesses": [{"id": witness_did_key}]
+            },
+            "watchers": ["https://did.observer"]
+        }
+    )
+    
+    # Load the next key for updates (needed for prerotation)
+    # The next key multikey is hashed in state.parameters.nextKeyHashes
+    from aries_askar import Store
+    from multiformats import multibase, multihash
+    import hashlib
+    
+    store = await Store.open(f"sqlite://{doc_dir}/keys.sqlite", pass_key="demo")
+    async with store.session() as session:
+        # Get all keys and find which one matches the nextKeyHashes
+        all_keys = await session.fetch_all_keys()
+        params = state.params if hasattr(state, 'params') else state.parameters
+        next_key_hash = params.get("nextKeyHashes", [])[0] if params and params.get("nextKeyHashes") else None
+        
+        next_update_key = None
+        if next_key_hash:
+            for key in all_keys:
+                # Hash this key's multikey
+                key_multikey = key.name
+                sha256_hash = hashlib.sha256(key_multikey.encode()).digest()
+                mh = multihash.wrap(sha256_hash, "sha2-256")
+                hash_multibase = multibase.encode(mh, "base58btc")
+                # Compare without the 'z' prefix
+                if hash_multibase[1:] == next_key_hash:
+                    from did_webvh.askar import AskarSigningKey as DidWebVHSigningKey
+                    # Fetch the KeyEntry and get the actual Key object
+                    key_entry = await session.fetch_key(key_multikey)
+                    next_update_key = DidWebVHSigningKey(key_entry.key, kid=key_multikey)
+                    break
+        
+        if not next_update_key:
+            next_update_key = genesis_key  # Fallback if no prerotation
+    
+    # Create a JWK signing key for VC-JOSE (for credential signing)
+    jwk_signing_key = AskarSigningKey.generate("ed25519")
+    jwk = askar_key_to_jwk(jwk_signing_key)
+    
+    did = state.document_id
+    did_web = did_webvh_to_web(did, parsed_url.netloc)
+    
+    # Read logs
+    history_file = doc_dir.joinpath("did.jsonl")
+    with open(history_file, "r") as f:
+        log_entries = [json.loads(line) for line in f if line.strip()]
+    
+    # Create witness signature for genesis (threshold of 1)
+    proof_data = {"versionId": state.version_id}
+    proof_data["proof"] = [di_jcs_sign(proof_data, witness_key)]
+    witness_file = [proof_data]
+    
+    # Check if DID already exists
+    check_response = await client.get(f"{server_url}/{namespace}/{alias}/did.json")
+    
+    if check_response.status_code == 200:
+        logger.info(f"  ✓ Already exists")
+        vm_methods = state.document.get("verificationMethod", [])
+    else:
+        # Step 1: Register genesis entry with server
+        payload = {"logEntry": log_entries[0], "witnessSignature": witness_file[0]}
+        try:
+            response = await client.post(
+                f"{server_url}/{namespace}/{alias}",
+                json=payload
+            )
+            response.raise_for_status()
+        except Exception as e:
+            logger.error(f"  ✗ Failed (genesis): {e}")
+            raise
+        
+        # Step 2: Add JWK verification method as a second log entry
+        from did_webvh.history import update_document_state
+        
+        vm_id = f"{did}#key-jwk-1"
+        vm_jwk = {
+            "id": vm_id,
+            "type": "JsonWebKey",
+            "controller": did,
+            "publicKeyJwk": jwk
+        }
+        
+        # Get current verification methods and add the new one
+        current_vms = state.document.get("verificationMethod", [])
+        updated_document = {
+            **state.document,
+            "verificationMethod": [*current_vms, vm_jwk]
+        }
+        
+        # Use didwebvh-py to create the next log entry properly
+        from did_webvh.history import write_document_state
+        
+        # Generate a new next key for the next rotation
+        new_next_key = AskarSigningKey.generate("ed25519")
+        new_key_hash_bytes = hashlib.sha256(new_next_key.multikey.encode()).digest()
+        new_key_mh = multihash.wrap(new_key_hash_bytes, "sha2-256")
+        new_key_hash = multibase.encode(new_key_mh, "base58btc")[1:]  # Remove 'z' prefix
+        
+        # Create params_update with updateKeys and nextKeyHashes
+        params_update = {
+            "updateKeys": [next_update_key.multikey],
+            "nextKeyHashes": [new_key_hash]
+        }
+        
+        updated_state = update_document_state(
+            state, 
+            next_update_key,  # This key matches the hash in state.parameters.nextKeyHashes
+            document=updated_document,
+            params_update=params_update
+        )
+        
+        # Write the updated state to the local history file
+        write_document_state(doc_dir, updated_state)
+        
+        # Read all log entries to get the update entry
+        with open(history_file, "r") as f:
+            all_log_entries = [json.loads(line) for line in f if line.strip()]
+        
+        update_log_entry = all_log_entries[-1]  # Get the last entry (the update)
+        
+        # Create witness signature for the update
+        proof_data_2 = {"versionId": update_log_entry["versionId"]}
+        proof_data_2["proof"] = [di_jcs_sign(proof_data_2, witness_key)]
+        witness_file_2 = [proof_data_2]
+        
+        # Post the update log entry
+        payload = {"logEntry": update_log_entry, "witnessSignature": witness_file_2[0]}
+        try:
+    response = await client.post(
+        f"{server_url}/{namespace}/{alias}",
+                json=payload
+    )
+    response.raise_for_status()
+            logger.info(f"  ✓ Created ({state.scid[:8]}...)")
+            vm_methods = updated_document["verificationMethod"]
+        except Exception as e:
+            logger.error(f"  ✗ Failed (update VM): {e}")
+            raise
+    
+    # Close the store after all operations
+    await store.close()
+    
+    return {
+        "name": name,
+        "did": did,
+        "did_web": did_web,  # did:web version for credential signing
+        "namespace": namespace,
+        "alias": alias,
+        "scid": state.scid,
+        "signing_key": genesis_key,
+        "jwk_signing_key": jwk_signing_key,  # Store JWK key for VC-JOSE signing
+        "doc_dir": doc_dir,
+        "verification_methods": vm_methods,
+        "witness_key": witness_key,  # Witness signing key (threshold: 1)
+    }
+
+
+async def create_status_list(client: httpx.AsyncClient, server_url: str, issuer: dict, list_id: str = "1") -> dict:
+    """Create a BitstringStatusList credential for an issuer."""
+    logger.info(f"▸ Status List: {issuer['name']}")
+    
+    # Create empty bitstring (131k credentials capacity)
+    encoded_list = create_empty_bitstring()
+    
+    # Create status list credential using Pydantic model
+    # Use did:web for issuer (credentials are signed with did:web)
+    status_list_vc = BitstringStatusListCredential(
+        id=f"{issuer['did_web']}/credentials/status/{list_id}",
+        issuer=issuer["did_web"],
+        validFrom=create_iso8601_timestamp(),
+        credentialSubject=BitstringStatusListCredentialSubject(
+            id=f"{issuer['did_web']}/status/{list_id}",
+            statusPurpose="revocation",
+            encodedList=encoded_list
+        )
+    )
+    
+    # Convert to dict
+    status_list_dict = json.loads(status_list_vc.model_dump_json(by_alias=True, exclude_none=True))
+    
+    # Sign with VC-JOSE (JWT) using JWK key
+    enveloped_vc = create_vc_jose_envelope(
+        status_list_dict, 
+        issuer["jwk_signing_key"], 
+        issuer["did_web"],  # Use did:web for signing
+        vm_id="#key-jwk-1"
+    )
+    
+    # Extract JWT from data URL for convenience
+    jwt_token = enveloped_vc["id"].split(",")[1]
+    
+    # Publish to credentials endpoint
+    # Use a Sqid based on current time for unique credential ID
+    credential_id = sqids.encode([int(time.time() * 1000)])
+    response = await client.post(
+        f"{server_url}/{issuer['namespace']}/{issuer['alias']}/credentials",
+        json={
+            "verifiableCredential": enveloped_vc,
+            "options": {
+                "credentialId": credential_id
+            }
+        }
+    )
+    
+    if response.status_code != 201:
+        logger.error(f"  ✗ Failed ({response.status_code})")
+        response.raise_for_status()
+    
+    logger.info(f"  ✓ Created ({credential_id[:8]}...)")
+    
+    return {
+        "credential": status_list_dict,
+        "enveloped": enveloped_vc,  # EnvelopedVerifiableCredential object
+        "jwt": jwt_token,  # The JWT string (extracted from function scope)
+        "list_id": list_id,
+        "credential_id": credential_id  # Sqid for resolvable URL
+    }
+
+
+async def issue_mines_act_permit(client: httpx.AsyncClient, server_url: str, cpo: dict, tek: dict, cpo_status_list: dict):
+    """CPO issues Mines Act Permit (UNTP DCC) to Tek and publishes it."""
+    logger.info(f"▸ Issuing: Mines Act Permit (DCC)")
+    
+    # Generate time-based sqid for the credential
+    sqids = Sqids(min_length=8)
+    timestamp_ms = int(time.time() * 1000)  # Current time in milliseconds
+    credential_sqid = sqids.encode([timestamp_ms])
+    credential_id = f"{cpo['did_web']}/credentials/{credential_sqid}"
+    
+    # Create credential using UNTP Pydantic models
+    # Use did:web for issuer (credentials are signed with did:web)
+    credential = DigitalConformityCredential(
+        id=credential_id,
+        issuer={
+            "id": cpo["did_web"],
+            "name": cpo["name"]
+        },
+        validFrom=create_iso8601_timestamp(),
+        credentialStatus={
+            "id": f"{credential_id}#status",
+            "type": "BitstringStatusListEntry",
+            "statusPurpose": "revocation",
+            "statusListIndex": str(random.randint(0, 100000)),  # Random index in status list
+            "statusListCredential": f"{server_url}/{cpo['namespace']}/{cpo['alias']}/credentials/{cpo_status_list['credential_id']}"
+        },
+        credentialSubject=ConformityAttestation(
+            id="urn:uuid:mines-permit-tek-001",
+            name="Mines Act Permit - Tek Copper Mine",
+            assessorLevel="Self",
+            assessmentLevel="GovtApproval",
+            attestationType="certification",
+            description="Operating permit for copper mining operations under the BC Mines Act",
+            issuedToParty=Organization(
+                id="urn:uuid:org-tek-mines",
+                name=tek["name"],
+                registeredId="A0061056",
+                idScheme=IdentifierScheme(
+                    id="https://www.bcregistry.gov.bc.ca/",
+                    name="BC Registry"
+                )
+            ),
+            authorisation=[
+                Endorsement(
+                    id="urn:uuid:permit-ma-2024-001",
+                    name="BC Mines Act Operating Permit",
+                    identifier=Identifier(
+                        registeredId="M-24-0001-COPPER",
+                        idScheme=IdentifierScheme(
+                            id="https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/96293_01#section10",
+                            name="BC Mines Act - Section 10 Permits"
+                        )
+                    ),
+                    issuingAuthority=Organization(
+                        id=cpo["did_web"],
+                        name="Chief Permitting Officer"
+                    ),
+                    effectiveDate=create_iso8601_timestamp()
+                )
+            ],
+            conformityTopic="governance.compliance",
+            assessedFacility=FacilityVerification(
+                facility=Organization(
+                    id="urn:uuid:facility-tek-mine-001",
+                    name="Tek Copper Mine",
+                    registeredId="MINE-BC-001",
+                    idScheme=IdentifierScheme(
+                        id="https://www2.gov.bc.ca/gov/content/industry/natural-resource-use/frontcounter-bc",
+                        name="Natural Resources Public Transparency Initiative"
+                    )
+                ),
+                IDverifiedByCAB=True
+            ),
+            assessedProduct=ProductVerification(
+                product=Organization(
+                    id="urn:uuid:product-copper-ore",
+                    name="Copper Ore",
+                    registeredId="7403.11",
+                    idScheme=IdentifierScheme(
+                        id="https://www.wcoomd.org/en/topics/nomenclature/instrument-and-tools/hs-nomenclature-2022-edition.aspx",
+                        name="Harmonized System Code (HS 2022)"
+                    )
+                ),
+                IDverifiedByCAB=True
+            ),
+            regulation=[
+                Regulation(
+                    id="https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/96293_01",
+                    name="Mines Act [RSBC 1996] CHAPTER 293",
+                    jurisdictionCountry="CA",
+                    administeredBy=Organization(
+                        id="https://www2.gov.bc.ca/gov/content/industry/mineral-exploration-mining",
+                        name="BC Ministry of Energy, Mines and Low Carbon Innovation"
+                    ),
+                    effectiveDate="1996-01-01"
+                )
+            ]
+        )
+    )
+    
+    
+    # Convert Pydantic model to JSON-serializable dict
+    credential_dict = json.loads(credential.model_dump_json(by_alias=True, exclude_none=True))
+    
+    # Sign credential with CPO's JWK signing key using VC-JOSE
+    # Use did:web version for the JWT kid
+    enveloped_credential = create_vc_jose_envelope(
+        credential_dict,
+        cpo["jwk_signing_key"],
+        cpo["did_web"],
+        vm_id="#key-jwk-1"
+    )
+    
+    # POST to credentials endpoint
+    response = await client.post(
+        f"{server_url}/{cpo['namespace']}/{cpo['alias']}/credentials",
+        json={
+            "verifiableCredential": enveloped_credential,
+            "options": {
+                "credentialId": credential_sqid  # Use sqid as the URL-friendly identifier
+            }
+        }
+    )
+    
+    if response.status_code != 201:
+        logger.error(f"  ✗ Failed ({response.status_code})")
+        response.raise_for_status()
+    
+    logger.info(f"  ✓ Published ({credential_sqid})")
+    
+    return credential_sqid
+
+
+async def issue_bc_registration(client: httpx.AsyncClient, roc: dict, tek: dict, roc_status_list: dict):
+    """ROC issues BC Registration (UNTP DIA) to Tek."""
+    logger.info(f"▸ Issuing: BC Registration (DIA)")
+    
+    # Create credential using UNTP Pydantic models
+    # Based on BC Registry
+    # UNTP DIA Spec: https://spec-untp-fbb45f.opensource.unicc.org/docs/specification/DigitalIdentityAnchor
+    # Use did:web for both issuer and subject
+    credential_id = f"{roc['did_web']}/credentials/bc-registration-A0061056"
+    credential = DigitalIdentityAnchor(
+        id=credential_id,
+        issuer={
+            "id": roc["did_web"],
+            "name": roc["name"]
+        },
+        validFrom=create_iso8601_timestamp(),
+        credentialStatus={
+            "id": f"{credential_id}#status",
+            "type": "BitstringStatusListEntry",
+            "statusPurpose": "revocation",
+            "statusListIndex": str(random.randint(0, 100000)),  # Random index in status list
+            "statusListCredential": f"{roc['did_web']}/credentials/{roc_status_list['credential_id']}"
+        },
+        credentialSubject=RegisteredIdentity(
+            id=tek["did_web"],  # Subject is Tek's did:web
+            name=tek["name"],
+            registeredId="A0061056",
+            idScheme=IdentifierScheme(
+                id="https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/02057_00",
+                    name="BC Registry"
+            ),
+            registerType="Business",
+            registrationScopeList=[
+                "https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/02057_00#section13"
+            ]
+        )
+    )
+    
+    # Convert to dict
+    credential_dict = json.loads(credential.model_dump_json(by_alias=True, exclude_none=True))
+    
+    # Sign with VC-JOSE (JWT) using ROC's JWK key
+    # Use did:web version for JWT kid
+    enveloped_vc = create_vc_jose_envelope(
+        credential_dict,
+        roc["jwk_signing_key"],  # ROC signs with their JWK key
+        roc["did_web"],
+        vm_id="#key-jwk-1"
+    )
+    
+    logger.info(f"  ✓ Signed (A0061056)")
+    
+    # Return both unsigned and signed versions
+    return {
+        "credential": credential_dict,
+        "enveloped": enveloped_vc,
+        "jwt": enveloped_vc["id"].split(",")[1]
+    }
+
+
+async def verify_credential(client: httpx.AsyncClient, server_url: str, credential_envelope: dict, verifier_name: str) -> bool:
+    """
+    Verify a VC-JOSE enveloped credential.
+    
+    Steps:
+    1. Extract JWT from data URL
+    2. Decode and parse JWT header and payload
+    3. Resolve issuer DID to get verification method
+    4. Verify JWT signature using issuer's public key
+    """
+    # Extract JWT from data URL
+    jwt_token = credential_envelope["id"].split(",")[1]
+    parts = jwt_token.split(".")
+    
+    if len(parts) != 3:
+        logger.error(f"  ✗ Invalid JWT format")
+        return False
+    
+    # Decode header and payload
+    header = json.loads(base64.urlsafe_b64decode(parts[0] + "=="))
+    payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=="))
+    signature = base64.urlsafe_b64decode(parts[2] + "==")
+    
+    # Extract issuer DID
+    issuer_did = payload.get("issuer")
+    if isinstance(issuer_did, dict):
+        issuer_did = issuer_did.get("id")
+    
+    # Verify structure
+    checks = {
+        "Valid JWT structure": len(parts) == 3,
+        "Has @context": "@context" in payload,
+        "Has type": "type" in payload,
+        "Has issuer": "issuer" in payload or issuer_did is not None,
+        "Has credentialSubject": "credentialSubject" in payload,
+    }
+    
+    
+    if all(checks.values()):
+        logger.info(f"  ✓ Valid")
+        return True
+    else:
+        logger.error(f"  ✗ Invalid structure")
+        return False
+
+
+def create_vp_jose_envelope(presentation: dict, signing_key: AskarSigningKey, holder_did: str, vm_id: str = "#key-jwk-1") -> dict:
+    """
+    Create a VC-JOSE (JWT) envelope for a verifiable presentation.
+    
+    Similar to VC envelope but for presentations (VP-JOSE).
+    """
+    # JWT Header
+    headers = {
+        "typ": "vp+jwt",  # Media type for VP-JOSE
+        "kid": f"{holder_did}{vm_id}",  # Key ID (verification method)
+        "alg": "EdDSA"  # Algorithm for Ed25519
+    }
+    
+    # JWT Payload is the entire presentation
+    payload = presentation
+    
+    # Create JWT manually using Askar signing
+    from json import dumps
+    header_b64 = base64.urlsafe_b64encode(dumps(headers, separators=(',', ':')).encode()).decode().rstrip('=')
+    payload_b64 = base64.urlsafe_b64encode(dumps(payload, separators=(',', ':')).encode()).decode().rstrip('=')
+    
+    # Sign with Askar key
+    message = f"{header_b64}.{payload_b64}".encode()
+    signature = signing_key.sign_message(message)
+    signature_b64 = base64.urlsafe_b64encode(signature).decode().rstrip('=')
+    
+    jwt_token = f"{header_b64}.{payload_b64}.{signature_b64}"
+    
+    # Wrap in EnvelopedVerifiablePresentation
+    enveloped_vp = {
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "id": f"data:application/vp+jwt,{jwt_token}",
+        "type": "EnvelopedVerifiablePresentation"
+    }
+    
+    return enveloped_vp
+
+
+async def update_tek_whois(client: httpx.AsyncClient, server_url: str, tek: dict, bc_registration: dict):
+    """Tek adds DIA to their whois.vp - creates an EnvelopedVerifiablePresentation."""
+    logger.info(f"▸ Creating WHOIS with BC Registration")
+    
+    # Create Verifiable Presentation with the enveloped DIA
+    # Use did:web for holder
+    whois_presentation = {
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "type": ["VerifiablePresentation"],
+        "holder": tek["did_web"],
+        "verifiableCredential": [bc_registration["enveloped"]]  # Include the EnvelopedVC
+    }
+    
+    # Sign the presentation with VC-JOSE using Tek's JWK key
+    logger.info(f"  Creating presentation for: {tek['name']}")
+    logger.info(f"  Including credential: BC Registration (DIA)")
+    logger.info(f"  Signing with VC-JOSE (VP-JWT envelope)...")
+    
+    enveloped_vp = create_vp_jose_envelope(
+        whois_presentation,
+        tek["jwk_signing_key"],  # Tek signs with their JWK key
+        tek["did_web"],
+        vm_id="#key-jwk-1"
+    )
+    
+    logger.info(f"  ✓ Presentation created")
+    
+    # Post to server
+    try:
+        response = await client.post(
+            f"{server_url}/{tek['namespace']}/{tek['alias']}/whois",
+            json={"verifiablePresentation": enveloped_vp}
+        )
+        response.raise_for_status()
+        logger.info(f"  ✓ WHOIS updated")
+    except httpx.HTTPError as e:
+        logger.warning(f"  ✗ WHOIS failed: {e}")
+    
+    return {
+        "presentation": whois_presentation,
+        "enveloped": enveloped_vp,
+        "jwt": enveloped_vp["id"].split(",")[1]
+    }
+
+
+async def issue_product_passport(client: httpx.AsyncClient, server_url: str, tek: dict, cpo: dict, mines_permit_sqid: str, tek_status_list: dict):
+    """Tek issues Product Passport for Copper (UNTP DPP) with conformity evidence and publishes it."""
+    logger.info(f"▸ Issuing: Product Passport (DPP)")
+    
+    # Generate time-based sqid for the DPP credential
+    sqids = Sqids(min_length=8)
+    timestamp_ms = int(time.time() * 1000)  # Current time in milliseconds
+    dpp_sqid = sqids.encode([timestamp_ms])
+    dpp_credential_id = f"{tek['did_web']}/credentials/{dpp_sqid}"
+    
+    # Construct the resolvable DCC URL (use did:web for the URL)
+    permit_credential_url = f"{cpo['did_web']}/credentials/{mines_permit_sqid}"
+    
+    # TODO: Add full DPP Pydantic models to untp_models.py
+    # For now, create DPP as a structured dict with conformity evidence
+    # Use did:web for issuer and manufacturer
+    credential = {
+        "@context": [
+            "https://www.w3.org/ns/credentials/v2",
+            "https://test.uncefact.org/vocabulary/untp/dpp/0.6.0/"
+        ],
+        "type": ["VerifiableCredential", "DigitalProductPassport"],
+        "id": dpp_credential_id,
+        "issuer": {
+            "id": tek["did_web"],
+            "name": tek["name"]
+        },
+        "validFrom": create_iso8601_timestamp(),
+        "credentialStatus": {
+            "id": f"{dpp_credential_id}#status",
+            "type": "BitstringStatusListEntry",
+            "statusPurpose": "revocation",
+            "statusListIndex": str(random.randint(0, 100000)),  # Random index in status list
+            "statusListCredential": f"{tek['did_web']}/credentials/{tek_status_list['credential_id']}"
+        },
+        "credentialSubject": {
+            "type": ["Product"],
+            "id": "urn:uuid:product-copper-batch-001",
+            "name": "Copper Concentrate",
+            "description": "High-grade copper concentrate from Tek Mine",
+            "manufacturer": {
+                "type": ["Organization"],
+                "id": tek["did_web"],
+                "name": tek["name"]
+            },
+            "materialsProvenance": [
+                {
+                    "name": "Copper Ore",
+                    "originCountry": "CA",
+                    "facility": {
+                        "id": "urn:uuid:facility-tek-mine-001",
+                        "name": "Tek Copper Mine"
+                    }
+                }
+            ],
+            "conformityClaims": [
+                {
+                    "type": ["Claim"],
+                    "topic": "governance.compliance",
+                    "assessmentLevel": "GovtApproval",
+                    "attestationType": "certification",
+                    "scope": {
+                        "name": "Mining Operations"
+                    },
+                    "issuedBy": {
+                        "id": cpo["did_web"],
+                        "name": cpo["name"]
+                    },
+                    "conformityEvidence": [
+                        {
+                            "id": permit_credential_url,
+                        "name": "BC Mines Act Permit",
+                            "type": ["DigitalConformityCredential"]
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    
+    
+    # Sign credential with Tek's JWK signing key using VC-JOSE
+    enveloped_credential = create_vc_jose_envelope(
+        credential,
+        tek["jwk_signing_key"],
+        tek["did_web"],
+        vm_id="#key-jwk-1"
+    )
+    
+    # POST to credentials endpoint
+    response = await client.post(
+        f"{server_url}/{tek['namespace']}/{tek['alias']}/credentials",
+        json={
+            "verifiableCredential": enveloped_credential,
+            "options": {
+                "credentialId": dpp_sqid  # Use sqid as the URL-friendly identifier
+            }
+        }
+    )
+    
+    if response.status_code != 201:
+        logger.error(f"  ✗ Failed ({response.status_code})")
+        response.raise_for_status()
+    
+    logger.info(f"  ✓ Published ({dpp_sqid})")
+    
+    return dpp_sqid
+
+
+async def run_demo(server_url: str):
+    """Run the demo script."""
+    print(f"\n╔═══ DID WebVH + UNTP Demo ═══╗")
+    print(f"╚ Server: {server_url}")
+    
+    output_dir = Path("demo_dids")
+    output_dir.mkdir(exist_ok=True)
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Phase 1: Create DIDs
+        print("\n══ Phase 1: DIDs ══")
+        
+        dids = {}
+        for actor in ACTORS:
+            did_info = await create_did(client, server_url, actor, output_dir)
+            if did_info:
+                dids[actor["alias"]] = did_info
+        
+        cpo = dids.get("chief-permitting-officer")
+        roc = dids.get("registrar-of-corporations")
+        tek = dids.get("tek-mines")
+        
+        if not all([cpo, roc, tek]):
+            logger.error("Failed to create all required DIDs")
+            return
+        
+        # Phase 1.5: Create Status Lists for each issuer
+        print("\n══ Phase 1.5: Status Lists ══")
+        
+        cpo_status = await create_status_list(client, server_url, cpo)
+        roc_status = await create_status_list(client, server_url, roc)
+        tek_status = await create_status_list(client, server_url, tek)
+        
+        # Store status lists with issuers
+        cpo["status_list"] = cpo_status
+        roc["status_list"] = roc_status
+        tek["status_list"] = tek_status
+        
+        # Phase 2: Issue Credentials
+        print("\n══ Phase 2: Credentials ══")
+        
+        # Step 1: CPO → Tek (Mines Act Permit)
+        mines_permit_sqid = await issue_mines_act_permit(client, server_url, cpo, tek, cpo_status)
+        
+        # Step 2: ROC → Tek (BC Registration)
+        bc_registration = await issue_bc_registration(client, roc, tek, roc_status)
+        
+        # Step 2.5: Tek verifies the DIA from ROC
+        dia_valid = await verify_credential(
+            client, 
+            server_url, 
+            bc_registration["enveloped"],
+            "Tek Mines"
+        )
+        
+        if not dia_valid:
+            logger.error("DIA verification failed, stopping demo")
+            return
+        
+        # Step 3: Tek updates WHOIS with BC Registration
+        whois_vp = await update_tek_whois(client, server_url, tek, bc_registration)
+        
+        # Step 4: Tek → Product (Copper Product Passport)
+        dpp_sqid = await issue_product_passport(client, server_url, tek, cpo, mines_permit_sqid, tek_status)
+    
+    # Summary
+    print(f"\n✓ Demo complete!")
+    print(f"  DIDs: {len(dids)} | Credentials: 6 | Output: {output_dir.absolute()}\n")
+
+
+def main():
+    """Parse arguments and run demo."""
+    parser = argparse.ArgumentParser(
+        description="UNTP supply chain demo for DID WebVH server"
+    )
+    parser.add_argument(
+        "server_url",
+        nargs="?",
+        help="WebVH server URL (default: http://localhost:8000)",
+        default="http://localhost:8000"
+    )
+    
+    args = parser.parse_args()
+    
+    asyncio.run(run_demo(args.server_url))
+
+
+if __name__ == "__main__":
+    main()
