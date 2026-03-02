@@ -11,7 +11,7 @@ ingress:
 
 networkPolicy:
   ingress:
-    namespaceSelector: []
+    namespaceSelector: {}  # map of label key/values; empty = match all namespaces
 
 server:
   image:
@@ -50,7 +50,7 @@ server:
   resources: {}
   nodeSelector: {}
   affinity: {}
-  tolerations: {}
+  tolerations: []  # list of Toleration; empty = no tolerations
 
   podAnnotations: {}
   podSecurityContext: {}
